@@ -37,7 +37,7 @@ from PyQt5.QtWidgets import QMenu, QAction, QActionGroup, QComboBox, QLabel, QPu
 from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
 from PyQt5.QtGui import QPen, QFont, QBrush, QColor, QPainter
 # Qt for global colors.  See http://doc.qt.io/qt-5/qt.html#GlobalColor-enum
-from PyQt5.QtCore import Qt, QRect, QTimer, QSettings
+from PyQt5.QtCore import Qt, QRect, QTimer, QSettings, QMargins
 from PyQt5.QtGui import QIcon, QRegion, QPalette, QFontMetrics
 from PyQt5 import QtCore
 
@@ -1348,11 +1348,20 @@ class mainWindow(QMainWindow):
         self.chart24.setAcceptHoverEvents(True)
         titleFont = QFont()
         titleFont.setPixelSize(18)
+        # Explicit modest axis-title and label fonts: otherwise they inherit the
+        # app font (large under qt5ct), which inflates the axis margins, shrinks
+        # the plot area, and makes QtCharts elide the axis titles (e.g. "dBm" ->
+        # "..."). Smaller labels + trimmed chart margins (below) reclaim the room.
+        axisTitleFont = QFont()
+        axisTitleFont.setPixelSize(12)
+        axisLabelFont = QFont()
+        axisLabelFont.setPixelSize(10)
         titleBrush = QBrush(QColor(0, 0, 255))
         self.chart24.setTitleFont(titleFont)
         self.chart24.setTitleBrush(titleBrush)
         self.chart24.setTitle('2.4 GHz')
         self.chart24.legend().hide()
+        self.chart24.setMargins(QMargins(2, 2, 2, 2))   # reclaim plot area for axis titles
         
         # Axis examples: https://doc.qt.io/qt-5/qtcharts-multiaxis-example.html
         self.chart24axisx = QValueAxis()
@@ -1361,6 +1370,8 @@ class mainWindow(QMainWindow):
         self.chart24axisx.setTickCount(17) # Axis count +1 (at 0 crossing)
         self.chart24axisx.setLabelFormat("%d")
         self.chart24axisx.setTitleText("Channel")
+        self.chart24axisx.setTitleFont(axisTitleFont)
+        self.chart24axisx.setLabelsFont(axisLabelFont)
         self.chart24axisx.setGridLineColor(QColor(70, 70, 70))
         self.chart24.addAxis(self.chart24axisx, Qt.AlignBottom)
         
@@ -1370,6 +1381,8 @@ class mainWindow(QMainWindow):
         self.chart24yAxis.setTickCount(9)
         self.chart24yAxis.setLabelFormat("%d")
         self.chart24yAxis.setTitleText("dBm")
+        self.chart24yAxis.setTitleFont(axisTitleFont)
+        self.chart24yAxis.setLabelsFont(axisLabelFont)
         self.chart24yAxis.setGridLineColor(QColor(70, 70, 70))
         self.chart24.addAxis(self.chart24yAxis, Qt.AlignLeft)
         
@@ -1385,6 +1398,7 @@ class mainWindow(QMainWindow):
         self.chart5.setTitle('5 GHz')
         self.chart5.createDefaultAxes()
         self.chart5.legend().hide()
+        self.chart5.setMargins(QMargins(2, 2, 2, 2))   # reclaim plot area for axis titles
         
         self.chart5axisx = QValueAxis()
         self.chart5axisx .setMin(30)
@@ -1392,6 +1406,8 @@ class mainWindow(QMainWindow):
         self.chart5axisx .setTickCount(15)
         self.chart5axisx .setLabelFormat("%d")
         self.chart5axisx .setTitleText("Channel")
+        self.chart5axisx .setTitleFont(axisTitleFont)
+        self.chart5axisx .setLabelsFont(axisLabelFont)
         self.chart5axisx .setGridLineColor(QColor(70, 70, 70))
         self.chart5.addAxis(self.chart5axisx , Qt.AlignBottom)
         
@@ -1401,6 +1417,8 @@ class mainWindow(QMainWindow):
         newAxis.setTickCount(9)
         newAxis.setLabelFormat("%d")
         newAxis.setTitleText("dBm")
+        newAxis.setTitleFont(axisTitleFont)
+        newAxis.setLabelsFont(axisLabelFont)
         newAxis.setGridLineColor(QColor(70, 70, 70))
         self.chart5.addAxis(newAxis, Qt.AlignLeft)
         

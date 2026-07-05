@@ -191,6 +191,27 @@ def apply_data_table(table):
         table.verticalHeader().setStyleSheet(hs)
 
 
+def size_table_columns(table, samples, stretch_col, padding=26):
+    # Size each column from the active font's metrics against a representative
+    # value (samples[col]) and the header text, instead of resizeColumnsToContents
+    # on an empty table (which only fits the headers, leaving data-heavy columns
+    # like MACs and timestamps too narrow). stretch_col fills the remaining space.
+    from PyQt5.QtGui import QFontMetrics
+    from PyQt5.QtWidgets import QHeaderView
+    hdr = table.horizontalHeader()
+    fm = QFontMetrics(table.font())
+    for col in range(table.columnCount()):
+        if col == stretch_col:
+            continue
+        hitem = table.horizontalHeaderItem(col)
+        header = hitem.text() if hitem is not None else ""
+        sample = samples.get(col, header)
+        width = max(fm.horizontalAdvance(sample), fm.horizontalAdvance(header)) + padding
+        hdr.setSectionResizeMode(col, QHeaderView.Interactive)
+        table.setColumnWidth(col, width)
+    hdr.setSectionResizeMode(stretch_col, QHeaderView.Stretch)
+
+
 def apply_theme(app, themeName):
     # Apply a resolved theme ('dark' or 'light') to the whole application.
     # Fusion is used because it honors custom palettes consistently, unlike the

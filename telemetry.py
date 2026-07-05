@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import QTableWidget, QHeaderView,QTableWidgetItem, QMessage
 #from PyQt5.QtCore import Qt
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QMargins
 from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
 from PyQt5.QtGui import QPen, QFont, QBrush, QColor, QPainter
 from PyQt5.QtWidgets import QPushButton
@@ -185,9 +185,14 @@ class TelemetryDialog(QDialog):
         self.locationTable.setGeometry(10, 10, self.geometry().width()//2-20, self.geometry().height()//2)
         self.locationTable.setShowGrid(True)
         self.locationTable.setHorizontalHeaderLabels(['macAddr','SSID', 'Strength', 'Timestamp','GPS', 'Latitude', 'Longitude', 'Altitude'])
-        self.locationTable.resizeColumnsToContents()
         self.locationTable.setRowCount(0)
-        self.locationTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        # Size columns to the data/font (SSID col 1 stretches to fill).
+        sparrowtheme.size_table_columns(self.locationTable, {
+            0: "00:11:22:33:44:55",       # macAddr
+            3: "00/00/0000 00:00:00",     # Timestamp
+            5: "-123.4567890",            # Latitude
+            6: "-123.4567890",            # Longitude
+            7: "-1234.567"}, 1)           # Altitude
         
         self.ntRightClickMenu = QMenu(self)
         newAct = QAction('Copy', self)        
@@ -385,21 +390,35 @@ class TelemetryDialog(QDialog):
         self.timeChart.legend().hide()
         
         # Axis examples: https://doc.qt.io/qt-5/qtcharts-multiaxis-example.html
+        # Explicit modest axis-title and label fonts: otherwise they inherit the
+        # app font (large under qt5ct), which inflates the axis margins, shrinks
+        # the plot area, and makes QtCharts elide the axis titles (e.g. "dBm" ->
+        # "..."). Smaller labels + trimmed chart margins reclaim the room.
+        axisTitleFont = QFont()
+        axisTitleFont.setPixelSize(12)
+        axisLabelFont = QFont()
+        axisLabelFont.setPixelSize(10)
+        self.timeChart.setMargins(QMargins(2, 2, 2, 2))
+
         newAxis = QValueAxis()
         newAxis.setMin(0)
         newAxis.setMax(self.maxPoints)
         newAxis.setTickCount(11)
         newAxis.setLabelFormat("%d")
         newAxis.setTitleText("Sample")
+        newAxis.setTitleFont(axisTitleFont)
+        newAxis.setLabelsFont(axisLabelFont)
         newAxis.setGridLineColor(QColor(70, 70, 70))
         self.timeChart.addAxis(newAxis, Qt.AlignBottom)
-        
+
         newAxis = QValueAxis()
         newAxis.setMin(-100)
         newAxis.setMax(-10)
         newAxis.setTickCount(9)
         newAxis.setLabelFormat("%d")
         newAxis.setTitleText("dBm")
+        newAxis.setTitleFont(axisTitleFont)
+        newAxis.setLabelsFont(axisLabelFont)
         newAxis.setGridLineColor(QColor(70, 70, 70))
         self.timeChart.addAxis(newAxis, Qt.AlignLeft)
         
@@ -559,9 +578,14 @@ class BluetoothTelemetry(TelemetryDialog):
         self.locationTable.setGeometry(10, 10, self.geometry().width()//2-20, self.geometry().height()//2)
         self.locationTable.setShowGrid(True)
         self.locationTable.setHorizontalHeaderLabels(['macAddr','Name', 'RSSI', 'TX Power', 'Est Range (m)', 'Timestamp','GPS', 'Latitude', 'Longitude', 'Altitude'])
-        self.locationTable.resizeColumnsToContents()
         self.locationTable.setRowCount(0)
-        self.locationTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        # Size columns to the data/font (Name col 1 stretches to fill).
+        sparrowtheme.size_table_columns(self.locationTable, {
+            0: "00:11:22:33:44:55",       # macAddr
+            5: "00/00/0000 00:00:00",     # Timestamp
+            7: "-123.4567890",            # Latitude
+            8: "-123.4567890",            # Longitude
+            9: "-1234.567"}, 1)           # Altitude
         
         self.ntRightClickMenu = QMenu(self)
         newAct = QAction('Copy', self)        
