@@ -21,7 +21,7 @@ jobs:
       - name: Install fpm
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev
+          sudo apt-get install -y ruby ruby-dev binutils   # binutils -> `ar`, needed by fpm's deb output
           sudo gem install --no-document fpm
 
       - name: Determine version

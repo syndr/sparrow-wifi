@@ -33,7 +33,7 @@ DIST     := dist
 APP_PY := \
 	sparrow-wifi.py sparrowwifiagent.py sparrowbluetooth.py sparrowcommon.py \
 	sparrowdialogs.py sparrowdrone.py sparrowgps.py sparrowhackrf.py \
-	sparrowmap.py sparrowrpi.py sparrowtablewidgets.py \
+	sparrowmap.py sparrowrpi.py sparrowtablewidgets.py sparrowtheme.py \
 	wirelessengine.py telemetry.py __init__.py
 APP_DATA := wifi_icon.png LICENSE
 APP_DIRS := images plugins
@@ -49,7 +49,7 @@ DEB_DEPS := \
 	python3 python3-venv python3-pip python3-dev build-essential \
 	python3-pyqt5 python3-pyqt5.qtchart python3-pyqt5.qsci \
 	python3-numpy python3-matplotlib python3-requests python3-dateutil \
-	gpsd gpsd-clients pkexec
+	gpsd gpsd-clients pkexec libglib2.0-bin
 
 DEB_DEPENDS := $(foreach d,$(DEB_DEPS),-d $(d))
 
