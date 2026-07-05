@@ -32,7 +32,7 @@ This fork focuses on the desktop GUI experience, packaging, and install ergonomi
 
 ### Screenshots
 
-> **Note on the look:** the polished appearance in these screenshots comes from a **Kvantum** desktop theme applied through `qt5ct` &mdash; it is **not bundled with the package**. Sparrow-WiFi follows whatever qt5ct theme you have configured; in System mode with no qt5ct theme present it falls back to a built-in Fusion light/dark palette. *(Link to the exact Kvantum theme used here to follow.)*
+> **Note on the look:** the polished appearance in these screenshots comes from the [**Hackerer**](https://github.com/syndr/hackerer-theme) **Kvantum** desktop theme applied through `qt5ct` &mdash; it is **not bundled with the package**. Sparrow-WiFi follows whatever qt5ct theme you have configured; in System mode with no qt5ct theme present it falls back to a built-in Fusion light/dark palette.
 
 <details>
 <summary><b>WiFi scan table &mdash; themed, with per-radio signal-strength coloring</b></summary>
