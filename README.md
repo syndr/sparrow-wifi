@@ -30,6 +30,50 @@ This fork focuses on the desktop GUI experience, packaging, and install ergonomi
 - **`.deb` packaging, CI, and versioning** &mdash; Sparrow-WiFi builds as an installable `.deb` via `fpm` (Makefile + `packaging/`), installing a `pkexec` launcher, `.desktop` entry, and icon; the post-install builds a `--system-site-packages` venv under `/var/lib/sparrow-wifi`. A GitHub Actions pipeline builds, install-tests (amd64 + arm64), and publishes to a Release on `v*` tags. `scripts/build-deb-podman.sh` reproduces the build locally in a cached container with no fpm toolchain on the host. `sparrowversion.py` is the single source of truth for the version (shown in the window title and About dialog).
 - **Venv installer** &mdash; `scripts/install.sh` sets up a dedicated venv (reusing distro-provided Qt bindings), installs apt + pip deps, and registers a menu launcher that elevates via `pkexec` at click time; `--update` git-pulls and refreshes deps.
 
+### Screenshots
+
+> **Note on the look:** the polished appearance in these screenshots comes from a **Kvantum** desktop theme applied through `qt5ct` &mdash; it is **not bundled with the package**. Sparrow-WiFi follows whatever qt5ct theme you have configured; in System mode with no qt5ct theme present it falls back to a built-in Fusion light/dark palette. *(Link to the exact Kvantum theme used here to follow.)*
+
+<details>
+<summary><b>WiFi scan table &mdash; themed, with per-radio signal-strength coloring</b></summary>
+
+<p align="center">
+  <img src="./images/wifi_table_themed.png" width="800"/>
+</p>
+
+Signal is colorized by strength band, and the Settings menu exposes Signal Strength Colors, Scan Interval, Reset Column Widths, and Theme.
+</details>
+
+<details>
+<summary><b>Live filter + channel-graph spotlight</b></summary>
+
+<p align="center">
+  <img src="./images/main_filtered_themed.png" width="800"/>
+</p>
+
+Typing in the Filter box (here <code>Ult</code>) hides non-matching rows and spotlights the matching lines in the 2.4/5 GHz channel graphs, dimming the rest.
+</details>
+
+<details>
+<summary><b>Bluetooth (BLE) scan table &mdash; themed</b></summary>
+
+<p align="center">
+  <img src="./images/ble_table_themed.png" width="800"/>
+</p>
+
+Font-sized columns and per-radio RSSI coloring (BLE thresholds default weaker than WiFi).
+</details>
+
+<details>
+<summary><b>Telemetry / source tracking &mdash; themed</b></summary>
+
+<p align="center">
+  <img src="./images/wifi_telemetry_themed.png" width="800"/>
+</p>
+
+Themed telemetry chart and table, with button state conveyed in the label (Pause Table, Streaming Save).
+</details>
+
 ---
 
 ## What's New (April 2026)
@@ -60,7 +104,7 @@ The original Sparrow application provides a comprehensive GUI-based replacement 
 ### Screenshots
 
 <p align="center">
-  <img src="./sparrow-screenshot.png" width="800"/>
+  <img src="./images/main_dark.png" width="800"/>
 </p>
 
 <p align="center">
