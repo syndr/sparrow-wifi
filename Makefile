@@ -1,19 +1,20 @@
 # Sparrow-WiFi packaging.
 #
-# Builds installable .deb / .rpm packages with fpm from a single staged tree.
-# The payload is pure Python (only the distro Qt stack is arch-specific, and
-# that comes in via package dependencies), so the packages are architecture
-# independent: Architecture: all (deb) / noarch (rpm).
+# Builds an installable .deb with fpm from a staged tree. The payload is pure
+# Python (only the distro Qt stack is arch-specific, and that comes in via
+# package dependencies), so the package is architecture independent:
+# Architecture: all.
 #
 # Usage:
 #   make deb            # build the .deb into dist/
-#   make rpm            # build the .rpm into dist/ (needs the `rpm` tool)
-#   make all            # both
 #   make VERSION=1.2.0 deb
 #   make clean
 #
-# Requires: fpm (https://github.com/jordansissel/fpm). `make rpm` additionally
-# needs the `rpm` CLI so fpm can emit that format.
+# Requires: fpm (https://github.com/jordansissel/fpm).
+#
+# NOTE: .rpm support is deferred. Fedora does not package the PyQt5 QtChart
+# binding (which the app hard-requires) and it has no pip wheel, so a clean
+# Fedora rpm needs a source build of the binding. Tracked as a follow-up.
 
 PKG         := sparrow-wifi
 VERSION     ?= 1.0.0
@@ -39,22 +40,18 @@ APP_DIRS := images plugins
 
 APP_DST := $(PKGROOT)/usr/share/$(PKG)
 
-# --- dependency lists (package names differ per ecosystem) -----------------
-# python3-dev/-devel + a compiler are needed because the postinstall builds a
-# venv and pip-installs dronekit, which compiles pymavlink's C extension.
+# --- dependency list -------------------------------------------------------
+# python3-dev + a compiler are kept as a safety net: the postinstall builds a
+# venv and pip-installs dronekit -> pymavlink; that ships aarch64/amd64 wheels
+# today, but the toolchain lets pip fall back to a source build if a wheel is
+# ever missing.
 DEB_DEPS := \
 	python3 python3-venv python3-pip python3-dev build-essential \
 	python3-pyqt5 python3-pyqt5.qtchart python3-pyqt5.qsci \
 	python3-numpy python3-matplotlib python3-requests python3-dateutil \
 	gpsd gpsd-clients pkexec
-RPM_DEPS := \
-	python3 python3-pip python3-devel gcc \
-	python3-qt5 python3-qscintilla-qt5 \
-	python3-numpy python3-matplotlib python3-requests python3-dateutil \
-	gpsd gpsd-clients polkit
 
 DEB_DEPENDS := $(foreach d,$(DEB_DEPS),-d $(d))
-RPM_DEPENDS := $(foreach d,$(RPM_DEPS),-d $(d))
 
 # --- fpm invocation shared bits --------------------------------------------
 FPM_COMMON := \
@@ -68,12 +65,12 @@ FPM_COMMON := \
 	--after-remove   "$(CURDIR)/packaging/postrm" \
 	-C $(PKGROOT) -p $(DIST)
 
-.PHONY: all deb rpm stage clean help check-fpm check-rpm
+.PHONY: all deb stage clean help check-fpm
 
 help:
-	@echo "Targets: deb, rpm, all, stage, clean   (override VERSION=x.y.z)"
+	@echo "Targets: deb, stage, clean   (override VERSION=x.y.z)"
 
-all: deb rpm
+all: deb
 
 # --- assemble the install tree ---------------------------------------------
 stage:
@@ -101,11 +98,6 @@ deb: check-fpm stage
 	fpm -t deb $(DEB_DEPENDS) $(FPM_COMMON) .
 	@echo ">> built: $$(ls $(DIST)/*.deb)"
 
-rpm: check-fpm check-rpm stage
-	rm -f $(DIST)/$(PKG)-$(VERSION)-$(ITERATION).noarch.rpm
-	fpm -t rpm $(RPM_DEPENDS) $(FPM_COMMON) .
-	@echo ">> built: $$(ls $(DIST)/*.rpm)"
-
 clean:
 	rm -rf $(BUILD) $(DIST)
 
@@ -113,7 +105,3 @@ clean:
 check-fpm:
 	@command -v fpm >/dev/null 2>&1 || { \
 		echo "error: fpm not found. Install with: gem install fpm  (needs Ruby)"; exit 1; }
-
-check-rpm:
-	@command -v rpm >/dev/null 2>&1 || command -v rpmbuild >/dev/null 2>&1 || { \
-		echo "error: the 'rpm' tool is required to build .rpm (apt install rpm)"; exit 1; }

@@ -1,10 +1,12 @@
 # Packaging
 
-Builds installable **`.deb`** and **`.rpm`** packages for Sparrow-WiFi with
-[`fpm`](https://github.com/jordansissel/fpm) from a single staged tree, driven by
-the top-level `Makefile`. CI in `.github/workflows/package.yml` builds both
-formats, install-tests them on amd64 **and** arm64, and publishes them to a
-GitHub Release on version tags.
+Builds an installable **`.deb`** package for Sparrow-WiFi with
+[`fpm`](https://github.com/jordansissel/fpm) from a staged tree, driven by the
+top-level `Makefile`. CI in `.github/workflows/package.yml` builds it,
+install-tests it on amd64 **and** arm64, and publishes it to a GitHub Release on
+version tags.
+
+> **`.rpm` is deferred** — see [RPM (deferred)](#rpm-deferred) below.
 
 ## What the package installs
 
@@ -20,37 +22,32 @@ GitHub Release on version tags.
 ### Dependency model
 
 The Qt/numpy stack is pulled from **distro packages** (declared as package
-dependencies — Debian and Fedora names live in `DEB_DEPS` / `RPM_DEPS` in the
-`Makefile`). The three deps that aren't in the distros — `gps3`, `dronekit`,
-`manuf` — are installed by the **post-install** into the venv
-(`--system-site-packages`, so it reuses the distro Qt). `dronekit` pulls
-`pymavlink`, which compiles a small C extension, so the packages depend on a
-compiler + Python headers and **network access is required at install time**.
+dependencies — see `DEB_DEPS` in the `Makefile`). The three deps that aren't in
+the distro — `gps3`, `dronekit`, `manuf` — are installed by the **post-install**
+into the venv (`--system-site-packages`, so it reuses the distro Qt). `dronekit`
+pulls `pymavlink`; it ships prebuilt aarch64/amd64 wheels today, but a compiler +
+Python headers are kept as deps so pip can fall back to a source build, and
+**network access is required at install time**.
 
-The package payload is pure Python, so both packages are architecture
-independent (`Architecture: all` / `noarch`); the only arch-specific pieces are
-the distro Qt bindings resolved by the package manager on the target host.
+The package payload is pure Python, so the package is architecture independent
+(`Architecture: all`); the only arch-specific pieces are the distro Qt bindings
+resolved by the package manager on the target host.
 
 ## Building locally
 
-Requires `fpm` (`gem install fpm`, needs Ruby). `make rpm` additionally needs the
-`rpm` CLI (`apt install rpm`).
+Requires `fpm` (`gem install fpm`, needs Ruby).
 
 ```sh
 make deb                 # -> dist/sparrow-wifi_1.0.0-1_all.deb
-make rpm                 # -> dist/sparrow-wifi-1.0.0-1.noarch.rpm
-make all                 # both
 make VERSION=1.2.0 deb   # override the version
 make clean
 ```
 
-Inspect the results:
+Inspect the result:
 
 ```sh
 dpkg-deb -c dist/*.deb   # file list
 dpkg-deb -I dist/*.deb   # metadata + Depends
-rpm  -qpl dist/*.rpm     # file list
-rpm  -qpR dist/*.rpm     # Requires
 ```
 
 Install / remove (Debian/Ubuntu):
@@ -62,12 +59,28 @@ sudo apt-get purge   -y sparrow-wifi     # also wipes /var/lib/sparrow-wifi
 
 ## Releasing
 
-Push a `v*` tag (e.g. `v1.2.0`). CI derives the version from the tag, builds both
-formats, runs the dual-arch install tests, and attaches the `.deb` + `.rpm` to a
-GitHub Release.
+Push a `v*` tag (e.g. `v1.2.0`). CI derives the version from the tag, builds the
+`.deb`, runs the dual-arch install tests, and attaches it to a GitHub Release.
+
+## RPM (deferred)
+
+`fpm` can emit an `.rpm` from the same staged tree in one extra invocation, but a
+package that actually **installs cleanly on Fedora** is not that simple:
+
+- The app hard-imports `PyQt5.QtChart` (`sparrow-wifi.py`, `telemetry.py`).
+- Fedora ships `python3-qt5` (QtWidgets), `python3-qscintilla-qt5` (Qsci), and
+  the C++ `qt5-qtcharts` library — but **no PyQt5 QtChart Python binding** (only
+  the PyQt6 one, `python3-pyqt6-charts`).
+- `pip install PyQtChart` has no wheel for Fedora's Python and falls back to a
+  source build needing a full Qt/sip toolchain.
+
+So a Fedora rpm needs either a source build of just the QtChart binding (against
+`qt5-qtcharts-devel` + PyQt5), the app ported to PyQt6, or the QtChart import made
+optional. Tracked as a follow-up. Other rpm distros (e.g. openSUSE, which
+packages the PyQt5 charts binding) may work with only a dependency-name change.
 
 ## Not using a package?
 
 `scripts/install.sh` remains the from-checkout install path (venv + apt deps +
 pkexec launcher, with an `--update` mode). The package simply wraps the same
-approach into proper `.deb`/`.rpm` artifacts.
+approach into a proper `.deb` artifact.
