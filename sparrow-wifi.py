@@ -2719,13 +2719,27 @@ class mainWindow(QMainWindow):
 
     def applyNetworkFilter(self):
         # Hide rows whose MAC (col 0), vendor (col 1), or SSID (col 2) don't
-        # contain the filter text. Empty filter shows everything. Re-run after
-        # every table repopulate so newly-seen networks obey the active filter.
+        # contain the filter text, AND spotlight the matches in the channel
+        # graphs: matching networks' lines stay full opacity, non-matching lines
+        # are dimmed (still faintly visible for context). Empty filter shows all
+        # rows and restores full opacity. Re-run after every table repopulate so
+        # newly-seen networks obey the active filter.
+        #
+        # Opacity (not pen width) is used so this stays independent of the
+        # selection emphasis in onNetworkTableSelectionChanged, which owns width.
+        DIM_OPACITY = 0.15
         filterText = self.networkFilter.text().strip().lower()
         for row in range(self.networkTable.rowCount()):
+            # The SSID cell (col 2) anchors this row's chart line (Qt.UserRole).
+            ssidItem = self.networkTable.item(row, 2)
+            series = ssidItem.data(Qt.UserRole) if ssidItem is not None else None
+
             if not filterText:
                 self.networkTable.setRowHidden(row, False)
+                if series is not None:
+                    series.setOpacity(1.0)
                 continue
+
             match = False
             for col in (0, 1, 2):
                 item = self.networkTable.item(row, col)
@@ -2733,6 +2747,8 @@ class mainWindow(QMainWindow):
                     match = True
                     break
             self.networkTable.setRowHidden(row, not match)
+            if series is not None:
+                series.setOpacity(1.0 if match else DIM_OPACITY)
 
     def onScanClicked(self, pressed):
         if self.menuRemoteAgent.isChecked():
