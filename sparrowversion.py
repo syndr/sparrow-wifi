@@ -6,4 +6,4 @@
 # built .deb version tracks the code automatically. Bump this, then tag the
 # release `v<this value>` (e.g. v2.1.0) — CI verifies the tag matches.
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
