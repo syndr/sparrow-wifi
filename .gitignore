@@ -11,6 +11,8 @@ cur/
 tmp/
 __pycache__/
 *.DS_Store
+# Dedicated app venv created by install.sh
+venv/
 controller/.venv/
 controller/state/controller.db
 controller.db
