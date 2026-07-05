@@ -1147,9 +1147,13 @@ class BluetoothDialog(QDialog):
         self.bluetoothTable.setShowGrid(True)
         self.bluetoothTable.setHorizontalHeaderLabels(['uuid', 'Address', 'Name', 'Company', 'Manufacturer','Type', 'RSSI','TX Power','Est Range (m)','Last Seen','GPS'])
         self.bluetoothTable.setGeometry(10, 30, 100, 30)
-        self.bluetoothTable.resizeColumnsToContents()
         self.bluetoothTable.setRowCount(0)
-        self.bluetoothTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        # Size columns to the data/font (Name col 2 stretches to fill). uuid is
+        # left to its (narrow) header width since it's typically blank; a rare
+        # populated UUID will truncate but the column stays draggable.
+        sparrowtheme.size_table_columns(self.bluetoothTable, {
+            1: "00:11:22:33:44:55",                     # Address
+            9: "00/00/0000 00:00:00"}, 2)               # Last Seen
        #  self.historyTable.horizontalHeader().sectionClicked.connect(self.onTableHeadingClicked)
         self.bluetoothTable.horizontalHeader().sectionClicked.connect(self.onTableHeadingClicked)
         self.bluetoothTable.setSelectionMode( QAbstractItemView.SingleSelection )
