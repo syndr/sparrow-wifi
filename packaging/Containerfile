@@ -1,0 +1,20 @@
+# Builder image for producing the sparrow-wifi .deb locally with podman,
+# mirroring the GitHub Actions "package" workflow (.github/workflows/package.yml).
+#
+# It bakes in fpm + make so `make deb` runs the same way CI does. Built on demand
+# by scripts/build-deb-podman.sh and cached thereafter.
+#
+# The apt/gem steps below need network at image-build time; the actual package
+# build (make deb) does not.
+FROM docker.io/library/debian:trixie
+
+# ruby + ruby-dev + binutils(ar) are exactly what CI installs for fpm; make runs
+# the Makefile; ca-certificates lets `gem install` reach rubygems.org over https.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      make ruby ruby-dev binutils ca-certificates \
+ && gem install --no-document fpm \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
