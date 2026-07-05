@@ -45,10 +45,10 @@ from PyQt5 import QtCore
 from wirelessengine import WirelessEngine, WirelessNetwork
 from sparrowcommon import BaseThreadClass, portOpen, stringtobool
 from sparrowgps import GPSEngine, GPSStatus, SparrowGPS
-from telemetry import TelemetryDialog
+from telemetry import TelemetryDialog, signalToQColor
 from sparrowtablewidgets import IntTableWidgetItem, DateTableWidgetItem, FloatTableWidgetItem
 from sparrowmap import MapMarker, MapEngineOSM
-from sparrowdialogs import MapSettingsDialog, TelemetryMapSettingsDialog, AgentListenerDialog, GPSCoordDialog
+from sparrowdialogs import MapSettingsDialog, TelemetryMapSettingsDialog, AgentListenerDialog, GPSCoordDialog, SignalColorSettingsDialog
 from sparrowdialogs import AgentConfigDialog, RemoteFilesDialog, BluetoothDialog
 from sparrowwifiagent import AgentConfigSettings
 from sparrowbluetooth import SparrowBluetooth
@@ -694,7 +694,7 @@ class mainWindow(QMainWindow):
         self.bluetoothWin = None
         self.bluetoothDiscoveryClosed.connect(self.onBtDiscoveryClosed)
         
-        self.btSpectrumGain = 1.0
+        self.btSpectrumGain = QSettings().value('spectrum/gain', 1.0, type=float)
         
         self.btShowSpectrum = False
         self.btLastSpectrumState = False
@@ -740,8 +740,9 @@ class mainWindow(QMainWindow):
         self._tableUpdateInProgress = False
         self.scanThread = None
         # Delay between successive scans. 0.5s hammered the driver into a busy/stuck
-        # state; 1.5s is gentler. Override with --scan-delay or Settings > Scan Interval.
-        self.scanDelay = 1.5
+        # state; 1.5s is gentler. Persisted from Settings > Scan Interval; --scan-delay
+        # overrides it for the current run (applied after construction).
+        self.scanDelay = QSettings().value('scan/intervalSeconds', 1.5, type=float)
         self.scanresults.connect(self.scanResults)
         self.singleshotscanresults.connect(self.onSingleShotScanResults)
         self.scanresultsfromadvanced.connect(self.scanResultsFromAdvanced)
@@ -787,8 +788,8 @@ class mainWindow(QMainWindow):
         self.smallScreenHiddenColumns = [1, 6, 9, 10, 12]  # vendor, Frequency, %Util, Stations, First Seen
         self.columnMenuActions = []
         # When False, the 2.4/5 GHz channel graphs are hidden and the scan table
-        # takes the full window height (View > Channel Graphs).
-        self.showChannelGraphs = True
+        # takes the full window height (View > Channel Graphs). Persisted.
+        self.showChannelGraphs = QSettings().value('view/channelGraphs', True, type=bool)
 
         # UI theme. __main__ decides the theme and (for light/dark) applies the
         # palette before this window is built, stashing the result on the
@@ -837,6 +838,14 @@ class mainWindow(QMainWindow):
         self.createMenu()
         
         self.createControls()
+
+        # Apply persisted channel-graph visibility now that the plots exist. If
+        # graphs are hidden, resizeEvent (which reads showChannelGraphs) will
+        # give the table the full content area at show() time.
+        if not self.showChannelGraphs:
+            self.horizontalDivider.setVisible(False)
+            self.Plot24.setVisible(False)
+            self.Plot5.setVisible(False)
 
         #self.splitter1 = QSplitter(Qt.Vertical)
         #self.splitter2 = QSplitter(Qt.Horizontal)
@@ -1182,6 +1191,11 @@ class mainWindow(QMainWindow):
         self.menuScanInterval.triggered.connect(self.onSetScanInterval)
         settingsMenu.addAction(self.menuScanInterval)
 
+        self.menuSignalColors = QAction('Signal Strength Colors...', self)
+        self.menuSignalColors.setStatusTip('Set the recommended signal thresholds that color the telemetry tracker')
+        self.menuSignalColors.triggered.connect(self.onSetSignalColors)
+        settingsMenu.addAction(self.menuSignalColors)
+
         self.menuResetColumns = QAction('Reset Column Widths', self)
         self.menuResetColumns.setStatusTip('Reset the network table columns to their default widths')
         self.menuResetColumns.triggered.connect(self.onResetColumns)
@@ -1214,7 +1228,7 @@ class mainWindow(QMainWindow):
 
         viewMenu.addSeparator()
         self.menuChannelGraphs = QAction('Channel Graphs', self, checkable=True)
-        self.menuChannelGraphs.setChecked(True)
+        self.menuChannelGraphs.setChecked(self.showChannelGraphs)
         self.menuChannelGraphs.setStatusTip('Show/hide the 2.4/5 GHz channel graphs (table fills the window when hidden)')
         self.menuChannelGraphs.triggered.connect(self.onToggleChannelGraphs)
         viewMenu.addAction(self.menuChannelGraphs)
@@ -1453,6 +1467,7 @@ class mainWindow(QMainWindow):
                     QMessageBox.question(self, 'Error',"Invalid gain setting (gain must be greater then zero)", QMessageBox.Ok)
                 else:
                     self.btSpectrumGain = newGain
+                    QSettings().setValue('spectrum/gain', newGain)
             except:
                 QMessageBox.question(self, 'Error',"Could not convert " + text + " to a number.", QMessageBox.Ok)
 
@@ -2635,7 +2650,20 @@ class mainWindow(QMainWindow):
                                                   self.scanDelay, 0.0, 60.0, 1)
         if okPressed:
             self.setScanDelay(value)
+            QSettings().setValue('scan/intervalSeconds', value)
             self.statusBar().showMessage('Scan interval set to ' + str(value) + ' seconds')
+
+    def onSetSignalColors(self):
+        thresholds, okPressed = SignalColorSettingsDialog.getSettings(self)
+        if okPressed:
+            # Thresholds are read live from settings by the scan tables and
+            # telemetry trackers, so open views pick this up on their next update.
+            wifiGood, wifiFair = thresholds['wifi']
+            btGood, btFair = thresholds['bluetooth']
+            self.statusBar().showMessage('Signal colors set — WiFi green ≥ ' + str(wifiGood) +
+                                         '/orange ≥ ' + str(wifiFair) + ' dBm, ' +
+                                         'Bluetooth green ≥ ' + str(btGood) +
+                                         '/orange ≥ ' + str(btFair) + ' dBm')
 
     def applyColumnLayout(self):
         # Deterministic column sizing so widths don't have to be dragged every
@@ -2670,11 +2698,20 @@ class mainWindow(QMainWindow):
         hdr.setSectionResizeMode(2, QHeaderView.Stretch)
 
     def applyDefaultColumnVisibility(self):
-        # On small screens (uConsole) hide low-value columns so the rest fit
-        # without a horizontal scrollbar; show all on larger screens. Keeps the
-        # View menu's checkmarks in sync with the actual table state.
+        # Restore the user's persisted per-column visibility if they've set it;
+        # otherwise fall back to the defaults: on small screens (uConsole) hide
+        # low-value columns so the rest fit without a horizontal scrollbar; show
+        # all on larger screens. Keeps the View menu's checkmarks in sync with
+        # the actual table state.
+        saved = QSettings().value('view/hiddenColumns', None)
+        if saved is not None:
+            # Comma-separated column indices; '' means "nothing hidden".
+            hiddenSet = set(int(c) for c in str(saved).split(',') if c != '')
+        else:
+            hiddenSet = set(c for c in range(self.networkTable.columnCount())
+                            if self.smallScreen and c in self.smallScreenHiddenColumns)
         for col in range(self.networkTable.columnCount()):
-            hidden = self.smallScreen and (col in self.smallScreenHiddenColumns)
+            hidden = col in hiddenSet
             self.networkTable.setColumnHidden(col, hidden)
             if col < len(self.columnMenuActions):
                 self.columnMenuActions[col].setChecked(not hidden)
@@ -2684,8 +2721,12 @@ class mainWindow(QMainWindow):
         self.statusBar().showMessage('Column widths reset')
 
     def onToggleColumn(self, col, checked):
-        # View menu: show/hide a single network-table column.
+        # View menu: show/hide a single network-table column, then persist the
+        # full set of hidden columns.
         self.networkTable.setColumnHidden(col, not checked)
+        hidden = [str(c) for c in range(self.networkTable.columnCount())
+                  if self.networkTable.isColumnHidden(c)]
+        QSettings().setValue('view/hiddenColumns', ','.join(hidden))
 
     def onSetTheme(self, pref):
         # Settings > Theme: apply and persist a theme preference. Under qt5ct the
@@ -2725,6 +2766,7 @@ class mainWindow(QMainWindow):
         # View menu: show/hide the 2.4/5 GHz channel graphs. When hidden, the
         # scan table expands to fill the window (relayout via resizeEvent).
         self.showChannelGraphs = checked
+        QSettings().setValue('view/channelGraphs', checked)
         self.horizontalDivider.setVisible(checked)
         self.Plot24.setVisible(checked)
         self.Plot5.setVisible(checked)
@@ -3099,6 +3141,7 @@ class mainWindow(QMainWindow):
                         self.networkTable.item(curRow, 5).setText(str(curNet.getChannelString()))
                         self.networkTable.item(curRow, 6).setText(str(curNet.frequency))
                         self.networkTable.item(curRow, 7).setText(str(curNet.signal))
+                        self.networkTable.item(curRow, 7).setForeground(QBrush(signalToQColor(curNet.signal)))
 
                         if FromAdvanced:
                             # There are some fields that are not passed forward from advanced.  So let's update our curNet
@@ -3249,7 +3292,9 @@ class mainWindow(QMainWindow):
             self.networkTable.setItem(rowPosition, 4, QTableWidgetItem(curNet.privacy))
             self.networkTable.setItem(rowPosition, 5, IntTableWidgetItem(str(curNet.getChannelString())))
             self.networkTable.setItem(rowPosition, 6, IntTableWidgetItem(str(curNet.frequency)))
-            self.networkTable.setItem(rowPosition, 7,  IntTableWidgetItem(str(curNet.signal)))
+            signalItem = IntTableWidgetItem(str(curNet.signal))
+            signalItem.setForeground(QBrush(signalToQColor(curNet.signal)))
+            self.networkTable.setItem(rowPosition, 7, signalItem)
             self.networkTable.setItem(rowPosition, 8, IntTableWidgetItem(str(curNet.bandwidth)))
             self.networkTable.setItem(rowPosition, 9, FloatTableWidgetItem(str(curNet.utilization)))
             self.networkTable.setItem(rowPosition, 10, IntTableWidgetItem(str(curNet.stationcount)))
