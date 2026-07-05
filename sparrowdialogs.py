@@ -21,6 +21,7 @@
 from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QApplication, QLabel, QComboBox, QLineEdit, QPushButton, QAbstractItemView
 from PyQt5.QtWidgets  import QFileDialog, QSpinBox, QDesktopWidget, QMessageBox, QTableWidget, QHeaderView,QTableWidgetItem,  QMenu, QAction
 from sparrowtablewidgets import DateTableWidgetItem, FloatTableWidgetItem, IntTableWidgetItem
+import sparrowtheme
 from PyQt5.QtCore import Qt,QTimer
 from PyQt5 import QtCore
 
@@ -810,10 +811,7 @@ class AgentListenerDialog(QDialog):
         self.center()
 
     def setBlackoutColors(self):
-        self.agentTable.setStyleSheet("background-color: black;gridline-color: white;color: white")
-        headerStyle = "QHeaderView::section{background-color: white;border: 1px solid black;color: black}"
-        self.agentTable.horizontalHeader().setStyleSheet(headerStyle)
-        self.agentTable.verticalHeader().setStyleSheet(headerStyle)
+        sparrowtheme.apply_data_table(self.agentTable)
 
     def center(self):
         # Get our geometry
@@ -980,10 +978,7 @@ class GPSCoordDialog(QDialog):
             self.updateTable(curGPS)
 
     def setBlackoutColors(self):
-        self.historyTable.setStyleSheet("QTableView {background-color: black;gridline-color: white;color: white} QTableCornerButton::section{background-color: white;}")
-        headerStyle = "QHeaderView::section{background-color: white;border: 1px solid black;color: black;} QHeaderView::down-arrow,QHeaderView::up-arrow {background: none;}"
-        self.historyTable.horizontalHeader().setStyleSheet(headerStyle)
-        self.historyTable.verticalHeader().setStyleSheet(headerStyle)
+        sparrowtheme.apply_data_table(self.historyTable)
 
     def center(self):
         # Get our geometry
@@ -1344,10 +1339,7 @@ class BluetoothDialog(QDialog):
             self.setCursor(Qt.ArrowCursor)
 
     def setBlackoutColors(self):
-        self.bluetoothTable.setStyleSheet("background-color: black;gridline-color: white;color: white")
-        headerStyle = "QHeaderView::section{background-color: white;border: 1px solid black;color: black}"
-        self.bluetoothTable.horizontalHeader().setStyleSheet(headerStyle)
-        self.bluetoothTable.verticalHeader().setStyleSheet(headerStyle)
+        sparrowtheme.apply_data_table(self.bluetoothTable)
 
     def center(self):
         # Get our geometry
@@ -2265,10 +2257,7 @@ class RemoteFilesDialog(QDialog):
         self.btnDelete.setGeometry(size.width()-90, 130, 80, 30)
 
     def setBlackoutColors(self):
-        self.fileTable.setStyleSheet("background-color: black;gridline-color: white;color: white")
-        headerStyle = "QHeaderView::section{background-color: white;border: 1px solid black;color: black}"
-        self.fileTable.horizontalHeader().setStyleSheet(headerStyle)
-        self.fileTable.verticalHeader().setStyleSheet(headerStyle)
+        sparrowtheme.apply_data_table(self.fileTable)
 
     def center(self):
         # Get our geometry

@@ -35,6 +35,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from sparrowtablewidgets import IntTableWidgetItem, FloatTableWidgetItem, DateTableWidgetItem
+import sparrowtheme
 
 from threading import Lock
 
@@ -198,10 +199,7 @@ class TelemetryDialog(QDialog):
         self.locationTable.customContextMenuRequested.connect(self.showNTContextMenu)
         
     def setBlackoutColors(self):
-        self.locationTable.setStyleSheet("QTableView {background-color: black;gridline-color: white;color: white} QTableCornerButton::section{background-color: white;}")
-        headerStyle = "QHeaderView::section{background-color: white;border: 1px solid black;color: black;} QHeaderView::down-arrow,QHeaderView::up-arrow {background: none;}"
-        self.locationTable.horizontalHeader().setStyleSheet(headerStyle)
-        self.locationTable.verticalHeader().setStyleSheet(headerStyle)
+        sparrowtheme.apply_data_table(self.locationTable)
         
         mainTitleBrush = QBrush(Qt.red)
         self.timeChart.setTitleBrush(mainTitleBrush)
@@ -393,6 +391,7 @@ class TelemetryDialog(QDialog):
         newAxis.setTickCount(11)
         newAxis.setLabelFormat("%d")
         newAxis.setTitleText("Sample")
+        newAxis.setGridLineColor(QColor(70, 70, 70))
         self.timeChart.addAxis(newAxis, Qt.AlignBottom)
         
         newAxis = QValueAxis()
@@ -401,6 +400,7 @@ class TelemetryDialog(QDialog):
         newAxis.setTickCount(9)
         newAxis.setLabelFormat("%d")
         newAxis.setTitleText("dBm")
+        newAxis.setGridLineColor(QColor(70, 70, 70))
         self.timeChart.addAxis(newAxis, Qt.AlignLeft)
         
         chartBorder = Qt.darkGray

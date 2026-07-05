@@ -154,11 +154,14 @@ case "\$_portal" in
 esac
 export SPARROW_SYSTEM_THEME
 
+# Point the root process at the invoking user's config dir so qt5ct/Kvantum
+# (and the app's own settings) resolve to the user's theme, not root's.
 exec pkexec env \\
     DISPLAY="\${DISPLAY:-}" \\
     WAYLAND_DISPLAY="\${WAYLAND_DISPLAY:-}" \\
     XAUTHORITY="\${XAUTHORITY:-\$HOME/.Xauthority}" \\
     XDG_RUNTIME_DIR="\${XDG_RUNTIME_DIR:-}" \\
+    XDG_CONFIG_HOME="\${XDG_CONFIG_HOME:-\$HOME/.config}" \\
     QT_QPA_PLATFORM="\${QT_QPA_PLATFORM:-}" \\
     SPARROW_SYSTEM_THEME="\$SPARROW_SYSTEM_THEME" \\
     "\$VENV_PY" "\$APP" "\$@"

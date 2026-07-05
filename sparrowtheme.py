@@ -17,11 +17,26 @@
 # directly.
 
 import os
+import glob
 import subprocess
 
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QStyleFactory
+
+
+def qt5ct_available():
+    # qt5ct governs Qt5 apps (this app is PyQt5); qt6ct only affects Qt6 apps.
+    # Usable only if the Qt5 platformtheme plugin is installed AND the user has a
+    # qt5ct config to apply. Honors XDG_CONFIG_HOME (the launcher points this at
+    # the invoking user's config so it works under the pkexec root elevation).
+    plugin = (glob.glob('/usr/lib/*/qt5/plugins/platformthemes/libqt5ct.so')
+              + glob.glob('/usr/lib/qt5/plugins/platformthemes/libqt5ct.so')
+              + glob.glob('/usr/lib64/qt5/plugins/platformthemes/libqt5ct.so'))
+    if not plugin:
+        return False
+    cfgbase = os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config')
+    return os.path.isfile(os.path.join(cfgbase, 'qt5ct', 'qt5ct.conf'))
 
 
 def detect_system_theme():
@@ -120,6 +135,60 @@ def status_bar_style(themeName):
                 "border: 1px solid rgba(42,130,218,255); border-radius: 1px;}")
     return ("QStatusBar{background:rgba(192,192,192,255);color:black;"
             "border: 1px solid blue; border-radius: 1px;}")
+
+
+def table_header_style():
+    # The data tables are always dark (black body, white text) regardless of the
+    # chrome theme, so their headers must be dark too. Forcing both background
+    # AND text here keeps them readable even under a light or custom (qt5ct)
+    # palette that would otherwise draw header text from its own foreground color.
+    # QHeaderView{...} styles the header's own background, which shows in the
+    # empty area below the last section (e.g. when a filter leaves only a few
+    # rows); ::section styles the individual header cells.
+    return ("QHeaderView{background-color: rgb(45,45,45);} "
+            "QHeaderView::section{background-color: rgb(45,45,45);"
+            "border: 1px solid rgb(85,85,85);color: white;} "
+            "QHeaderView::down-arrow,QHeaderView::up-arrow {background: none;}")
+
+
+def apply_data_table(table):
+    # Style a data table (body + headers) for the active theme.
+    #
+    # Under qt5ct we paint the table explicitly from the qt5ct *chrome* colors
+    # (Window/WindowText, the same roles the menus use) rather than clearing the
+    # stylesheet. Clearing would let the widget style draw the item view, and
+    # some styles (e.g. Kvantum) paint item-view backgrounds from their own theme
+    # / the Base role — which can be light even when the chrome is dark, leaving
+    # the table white. Using the chrome colors keeps the table matching the rest
+    # of the UI whatever the style does.
+    #
+    # Otherwise (Fusion light/dark or the detected fallback) we force the classic
+    # dark table: the per-row SSID and chart-series colors are tuned for a dark
+    # background, so we keep the body dark even in "light" mode.
+    from PyQt5.QtWidgets import QApplication
+    app = QApplication.instance()
+    if bool(app.property('sparrowUsingQt5ct')):
+        pal = app.palette()
+        win = pal.color(QPalette.Window).name()
+        winText = pal.color(QPalette.WindowText).name()
+        btn = pal.color(QPalette.Button).name()
+        btnText = pal.color(QPalette.ButtonText).name()
+        grid = "rgba(128,128,128,90)"   # subtle, readable on light or dark
+        table.setStyleSheet("QTableView {background-color: %s;color: %s;gridline-color: %s;} "
+                            "QTableCornerButton::section{background-color: %s;}"
+                            % (win, winText, grid, btn))
+        hs = ("QHeaderView{background-color: %s;} "
+              "QHeaderView::section{background-color: %s;color: %s;border: 1px solid %s;} "
+              "QHeaderView::down-arrow,QHeaderView::up-arrow {background: none;}"
+              % (btn, btn, btnText, grid))
+        table.horizontalHeader().setStyleSheet(hs)
+        table.verticalHeader().setStyleSheet(hs)
+    else:
+        table.setStyleSheet("QTableView {background-color: black;gridline-color: white;"
+                            "color: white} QTableCornerButton::section{background-color: rgb(45,45,45);}")
+        hs = table_header_style()
+        table.horizontalHeader().setStyleSheet(hs)
+        table.verticalHeader().setStyleSheet(hs)
 
 
 def apply_theme(app, themeName):

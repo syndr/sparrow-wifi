@@ -38,7 +38,7 @@ from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
 from PyQt5.QtGui import QPen, QFont, QBrush, QColor, QPainter
 # Qt for global colors.  See http://doc.qt.io/qt-5/qt.html#GlobalColor-enum
 from PyQt5.QtCore import Qt, QRect, QTimer, QSettings
-from PyQt5.QtGui import QIcon, QRegion
+from PyQt5.QtGui import QIcon, QRegion, QPalette, QFontMetrics
 from PyQt5 import QtCore
 
 # from PyQt5.QtCore import QCoreApplication # programmatic quit
@@ -789,13 +789,16 @@ class mainWindow(QMainWindow):
         # takes the full window height (View > Channel Graphs).
         self.showChannelGraphs = True
 
-        # UI theme. __main__ resolves and applies the palette before this window
-        # is built and stashes the result on the QApplication; read it back so
-        # the menu checkmarks and the status bar match. Fall back to resolving
-        # here if the app was constructed some other way.
+        # UI theme. __main__ decides the theme and (for light/dark) applies the
+        # palette before this window is built, stashing the result on the
+        # QApplication; read it back so the menu checkmarks and status bar match.
         _app = QApplication.instance()
-        self.themePref = _app.property('sparrowThemePref') or 'auto'
-        self.themeName = _app.property('sparrowThemeName') or sparrowtheme.resolve_theme(self.themePref)
+        self.themePref = _app.property('sparrowThemePref') or 'system'
+        self.usingQt5ct = bool(_app.property('sparrowUsingQt5ct'))
+        self.themeName = _app.property('sparrowThemeName') or 'system'
+        # If we started under qt5ct, keep a copy of its palette so a live switch
+        # back to System can restore it without a relaunch.
+        self._qt5ctPalette = QPalette(_app.palette()) if self.usingQt5ct else None
         
         self.initUI()
         
@@ -898,7 +901,11 @@ class mainWindow(QMainWindow):
 
     def createControls(self):
         # self.statusBar().setStyleSheet("QStatusBar{background:rgba(204,229,255,255);color:black;border: 1px solid blue; border-radius: 1px;}")
-        self.statusBar().setStyleSheet(sparrowtheme.status_bar_style(self.themeName))
+        if self.usingQt5ct:
+            # Let the qt5ct palette style the status bar; no explicit override.
+            self.statusBar().setStyleSheet("")
+        else:
+            self.statusBar().setStyleSheet(sparrowtheme.status_bar_style(self.themeName))
         if GPSEngine.GPSDRunning():
             self.gpsEngine.start()
             self.statusBar().showMessage('Local gpsd Found.  System Ready.')
@@ -1072,10 +1079,7 @@ class mainWindow(QMainWindow):
         
         #$ self.networkTable.setStyleSheet("QTableCornerButton::section{background-color: white;}")
         # self.networkTable.cornerWidget().setStylesheet("background-color: black")
-        self.networkTable.setStyleSheet("QTableView {background-color: black;gridline-color: white;color: white} QTableCornerButton::section{background-color: white;}")
-        headerStyle = "QHeaderView::section{background-color: white;border: 1px solid black;color: black;} QHeaderView::down-arrow,QHeaderView::up-arrow {background: none;}"
-        self.networkTable.horizontalHeader().setStyleSheet(headerStyle)
-        self.networkTable.verticalHeader().setStyleSheet(headerStyle)
+        sparrowtheme.apply_data_table(self.networkTable)
         
     def createMenu(self):
         # Create main menu bar
@@ -1167,11 +1171,11 @@ class mainWindow(QMainWindow):
         self.menuResetColumns.triggered.connect(self.onResetColumns)
         settingsMenu.addAction(self.menuResetColumns)
 
-        # Theme: Auto (follow the system) / Light / Dark. Exclusive radio group.
+        # Theme: System (desktop / qt5ct) / Light / Dark. Exclusive radio group.
         themeMenu = settingsMenu.addMenu('Theme')
         self.themeActionGroup = QActionGroup(self)
         self.themeActionGroup.setExclusive(True)
-        for label, value in [('Auto (system)', 'auto'), ('Light', 'light'), ('Dark', 'dark')]:
+        for label, value in [('System (qt5ct)', 'system'), ('Light', 'light'), ('Dark', 'dark')]:
             act = QAction(label, self, checkable=True)
             act.setChecked(self.themePref == value)
             act.setStatusTip('Set the UI theme to ' + label)
@@ -1357,6 +1361,7 @@ class mainWindow(QMainWindow):
         self.chart24axisx.setTickCount(17) # Axis count +1 (at 0 crossing)
         self.chart24axisx.setLabelFormat("%d")
         self.chart24axisx.setTitleText("Channel")
+        self.chart24axisx.setGridLineColor(QColor(70, 70, 70))
         self.chart24.addAxis(self.chart24axisx, Qt.AlignBottom)
         
         self.chart24yAxis = QValueAxis()
@@ -1365,6 +1370,7 @@ class mainWindow(QMainWindow):
         self.chart24yAxis.setTickCount(9)
         self.chart24yAxis.setLabelFormat("%d")
         self.chart24yAxis.setTitleText("dBm")
+        self.chart24yAxis.setGridLineColor(QColor(70, 70, 70))
         self.chart24.addAxis(self.chart24yAxis, Qt.AlignLeft)
         
         chartBorder = Qt.darkGray
@@ -1386,6 +1392,7 @@ class mainWindow(QMainWindow):
         self.chart5axisx .setTickCount(15)
         self.chart5axisx .setLabelFormat("%d")
         self.chart5axisx .setTitleText("Channel")
+        self.chart5axisx .setGridLineColor(QColor(70, 70, 70))
         self.chart5.addAxis(self.chart5axisx , Qt.AlignBottom)
         
         newAxis = QValueAxis()
@@ -1394,6 +1401,7 @@ class mainWindow(QMainWindow):
         newAxis.setTickCount(9)
         newAxis.setLabelFormat("%d")
         newAxis.setTitleText("dBm")
+        newAxis.setGridLineColor(QColor(70, 70, 70))
         self.chart5.addAxis(newAxis, Qt.AlignLeft)
         
         self.Plot5 = QChartView(self.chart5, self)
@@ -2597,17 +2605,32 @@ class mainWindow(QMainWindow):
 
     def applyColumnLayout(self):
         # Deterministic column sizing so widths don't have to be dragged every
-        # launch. SSID (col 2) stretches to absorb slack; the rest get compact
-        # defaults and stay user-draggable (Interactive). Modes set here persist
-        # across the per-scan row updates, so this only runs once at construction
-        # (and again from the Reset Column Widths menu action). Visibility is
-        # handled separately (applyDefaultColumnVisibility + the View menu) so a
-        # width reset does not undo the user's chosen visible columns.
+        # launch. SSID (col 2) stretches to absorb slack; the rest are sized from
+        # the actual font metrics of a representative value (a full MAC, a full
+        # timestamp, etc.) so they fit the data and adapt to whatever font the
+        # active theme sets (e.g. qt5ct's larger font), while staying draggable.
+        # Modes set here persist across the per-scan row updates, so this runs
+        # once at construction (and again from Reset Column Widths). Visibility is
+        # handled separately so a width reset does not change visible columns.
         hdr = self.networkTable.horizontalHeader()
-        # column index -> default width (px). Col 2 (SSID) is omitted; it stretches.
-        defaultWidths = {0: 130, 1: 140, 3: 90, 4: 60, 5: 60, 6: 70, 7: 90,
-                         8: 80, 9: 80, 10: 60, 11: 130, 12: 130, 13: 45}
-        for col, width in defaultWidths.items():
+        fm = QFontMetrics(self.networkTable.font())
+        # column index -> representative widest value (falls back to header text).
+        samples = {0: "00:11:22:33:44:55",        # macAddr
+                   1: "A Fairly Long Vendor Co.",  # vendor
+                   3: "WPA2-Personal-CCMP",        # Security
+                   4: "privacy",                   # Privacy
+                   6: "5825 MHz",                  # Frequency
+                   7: "-100 dBm",                  # Signal Strength
+                   8: "160 MHz",                   # Bandwidth
+                   11: "00/00/0000 00:00:00",      # Last Seen
+                   12: "00/00/0000 00:00:00"}      # First Seen
+        padding = 26   # cell margins + room for the header sort indicator
+        for col in range(self.networkTable.columnCount()):
+            if col == 2:   # SSID stretches to fill remaining space
+                continue
+            header = self.networkColumns[col] if col < len(self.networkColumns) else ""
+            sample = samples.get(col, header)
+            width = max(fm.horizontalAdvance(sample), fm.horizontalAdvance(header)) + padding
             hdr.setSectionResizeMode(col, QHeaderView.Interactive)
             self.networkTable.setColumnWidth(col, width)
         hdr.setSectionResizeMode(2, QHeaderView.Stretch)
@@ -2631,18 +2654,38 @@ class mainWindow(QMainWindow):
         self.networkTable.setColumnHidden(col, not checked)
 
     def onSetTheme(self, pref):
-        # Settings > Theme: apply and persist a theme preference. Palette changes
-        # propagate to open windows; the status bar (explicit stylesheet) is
-        # restyled directly. Data panels (table/charts) stay dark by design.
-        self.themePref = pref
-        self.themeName = sparrowtheme.resolve_theme(pref)
+        # Settings > Theme: apply and persist a theme preference. Under qt5ct the
+        # tables follow the qt5ct palette; in Light/Dark they stay dark panels.
         _app = QApplication.instance()
-        sparrowtheme.apply_theme(_app, self.themeName)
-        _app.setProperty('sparrowThemePref', self.themePref)
-        _app.setProperty('sparrowThemeName', self.themeName)
-        self.statusBar().setStyleSheet(sparrowtheme.status_bar_style(self.themeName))
+        self.themePref = pref
         QSettings().setValue('ui/theme', pref)
-        self.statusBar().showMessage('Theme set to ' + pref + ' (' + self.themeName + ')')
+        _app.setProperty('sparrowThemePref', pref)
+
+        if pref in ('light', 'dark'):
+            # Force a Fusion palette override (works live, wins over qt5ct).
+            self.usingQt5ct = False
+            self.themeName = pref
+            sparrowtheme.apply_theme(_app, pref)
+            _app.setProperty('sparrowThemeName', pref)
+            _app.setProperty('sparrowUsingQt5ct', False)
+            self.statusBar().setStyleSheet(sparrowtheme.status_bar_style(pref))
+            sparrowtheme.apply_data_table(self.networkTable)
+            self.statusBar().showMessage('Theme set to ' + pref)
+        else:  # system
+            if self._qt5ctPalette is not None:
+                # Started under qt5ct: restore its captured palette live.
+                self.usingQt5ct = True
+                self.themeName = 'system'
+                _app.setPalette(self._qt5ctPalette)
+                _app.setProperty('sparrowThemeName', 'system')
+                _app.setProperty('sparrowUsingQt5ct', True)
+                self.statusBar().setStyleSheet("")
+                sparrowtheme.apply_data_table(self.networkTable)
+                self.statusBar().showMessage('Theme set to system (qt5ct)')
+            else:
+                # qt5ct plugin was not loaded at startup; it can only be applied
+                # at construction, so a relaunch is needed.
+                self.statusBar().showMessage('System theme saved — restart to apply.')
 
     def onToggleChannelGraphs(self, checked):
         # View menu: show/hide the 2.4/5 GHz channel graphs. When hidden, the
@@ -3942,25 +3985,42 @@ if __name__ == '__main__':
     argparser = argparse.ArgumentParser(description='Sparrow-WiFi')
     argparser.add_argument('--scan-delay', type=float, default=None,
                            help='Delay in seconds between successive scans (default 1.5)')
-    argparser.add_argument('--theme', choices=['auto', 'light', 'dark'], default=None,
-                           help='UI theme: auto (follow the system, default), light, or dark')
+    argparser.add_argument('--theme', choices=['system', 'auto', 'light', 'dark'], default=None,
+                           help='UI theme: system (follow the desktop / qt5ct, default), light, or dark')
     # parse_known_args so any Qt/X args pass through untouched
     parsedArgs, remainingArgs = argparser.parse_known_args()
 
-    app = QApplication([sys.argv[0]] + remainingArgs)
-
-    # Theme: resolve the preference (CLI overrides the saved setting) and apply
-    # the palette BEFORE building the window, so it renders themed from frame 1.
+    # Theme decision must happen BEFORE QApplication is constructed, because the
+    # qt5ct platform theme is loaded from QT_QPA_PLATFORMTHEME at construction.
     QApplication.setOrganizationName('UltronCORE')
     QApplication.setApplicationName('sparrow-wifi')
     if parsedArgs.theme is not None:
         themePref = parsedArgs.theme
     else:
-        themePref = QSettings().value('ui/theme', 'auto', type=str)
-    themeName = sparrowtheme.resolve_theme(themePref)
-    sparrowtheme.apply_theme(app, themeName)
+        themePref = QSettings().value('ui/theme', 'system', type=str)
+    if themePref == 'auto':          # legacy value -> system
+        themePref = 'system'
+
+    usingQt5ct = False
+    themeName = None
+    if themePref == 'system' and sparrowtheme.qt5ct_available():
+        # Let Qt + qt5ct apply the user's configured style/palette/fonts.
+        os.environ.setdefault('QT_QPA_PLATFORMTHEME', 'qt5ct')
+        usingQt5ct = True
+    else:
+        # Manual light/dark, or system with no qt5ct: use our Fusion palette and
+        # suppress any platform theme so it can't fight the override.
+        os.environ.pop('QT_QPA_PLATFORMTHEME', None)
+        themeName = themePref if themePref in ('light', 'dark') else sparrowtheme.detect_system_theme()
+
+    app = QApplication([sys.argv[0]] + remainingArgs)
+    if usingQt5ct:
+        app.setProperty('sparrowThemeName', 'system')
+    else:
+        sparrowtheme.apply_theme(app, themeName)
+        app.setProperty('sparrowThemeName', themeName)
     app.setProperty('sparrowThemePref', themePref)
-    app.setProperty('sparrowThemeName', themeName)
+    app.setProperty('sparrowUsingQt5ct', usingQt5ct)
 
     mainWin = mainWindow()
     if parsedArgs.scan_delay is not None:
