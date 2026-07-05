@@ -135,12 +135,32 @@ if [[ -n "\${DISPLAY:-}" ]]; then
     xhost +si:localuser:root >/dev/null 2>&1 || true
 fi
 
+# Detect the system light/dark scheme now, while still running as the invoking
+# user — the elevated (root) process usually can't reach the user session bus,
+# so we hand the result to the app via SPARROW_SYSTEM_THEME. XDG portal first
+# (color-scheme: 1=dark, 2=light), then gsettings as a fallback.
+SPARROW_SYSTEM_THEME="light"
+_portal=\$(gdbus call --session --dest org.freedesktop.portal.Desktop \\
+    --object-path /org/freedesktop/portal/desktop \\
+    --method org.freedesktop.portal.Settings.Read \\
+    org.freedesktop.appearance color-scheme 2>/dev/null || true)
+case "\$_portal" in
+    *"uint32 1"*) SPARROW_SYSTEM_THEME="dark" ;;
+    *"uint32 2"*) SPARROW_SYSTEM_THEME="light" ;;
+    *)
+        _gs=\$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)
+        case "\$_gs" in *dark*) SPARROW_SYSTEM_THEME="dark" ;; esac
+        ;;
+esac
+export SPARROW_SYSTEM_THEME
+
 exec pkexec env \\
     DISPLAY="\${DISPLAY:-}" \\
     WAYLAND_DISPLAY="\${WAYLAND_DISPLAY:-}" \\
     XAUTHORITY="\${XAUTHORITY:-\$HOME/.Xauthority}" \\
     XDG_RUNTIME_DIR="\${XDG_RUNTIME_DIR:-}" \\
     QT_QPA_PLATFORM="\${QT_QPA_PLATFORM:-}" \\
+    SPARROW_SYSTEM_THEME="\$SPARROW_SYSTEM_THEME" \\
     "\$VENV_PY" "\$APP" "\$@"
 LAUNCHEOF
 sudo chmod 755 "$BIN_DST"

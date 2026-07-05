@@ -32,12 +32,12 @@ from threading import Thread, Lock
 
 from PyQt5.QtWidgets import QApplication, QMainWindow,  QDesktopWidget, QGraphicsSimpleTextItem, QFrame, QGraphicsView
 from PyQt5.QtWidgets import QMessageBox, QFileDialog, QInputDialog, QLineEdit, QAbstractItemView #, QSplitter
-from PyQt5.QtWidgets import QMenu, QAction, QComboBox, QLabel, QPushButton, QCheckBox, QTableWidget,QTableWidgetItem, QHeaderView
+from PyQt5.QtWidgets import QMenu, QAction, QActionGroup, QComboBox, QLabel, QPushButton, QCheckBox, QTableWidget,QTableWidgetItem, QHeaderView
 #from PyQt5.QtWidgets import QTabWidget, QWidget, QVBoxLayout
 from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
 from PyQt5.QtGui import QPen, QFont, QBrush, QColor, QPainter
 # Qt for global colors.  See http://doc.qt.io/qt-5/qt.html#GlobalColor-enum
-from PyQt5.QtCore import Qt, QRect, QTimer
+from PyQt5.QtCore import Qt, QRect, QTimer, QSettings
 from PyQt5.QtGui import QIcon, QRegion
 from PyQt5 import QtCore
 
@@ -53,6 +53,7 @@ from sparrowdialogs import AgentConfigDialog, RemoteFilesDialog, BluetoothDialog
 from sparrowwifiagent import AgentConfigSettings
 from sparrowbluetooth import SparrowBluetooth
 from sparrowhackrf import SparrowHackrf
+import sparrowtheme
 
 # There are some "plugins" that are available for addons.  Let's see if they're present
 hasFalcon = False
@@ -787,6 +788,14 @@ class mainWindow(QMainWindow):
         # When False, the 2.4/5 GHz channel graphs are hidden and the scan table
         # takes the full window height (View > Channel Graphs).
         self.showChannelGraphs = True
+
+        # UI theme. __main__ resolves and applies the palette before this window
+        # is built and stashes the result on the QApplication; read it back so
+        # the menu checkmarks and the status bar match. Fall back to resolving
+        # here if the app was constructed some other way.
+        _app = QApplication.instance()
+        self.themePref = _app.property('sparrowThemePref') or 'auto'
+        self.themeName = _app.property('sparrowThemeName') or sparrowtheme.resolve_theme(self.themePref)
         
         self.initUI()
         
@@ -889,7 +898,7 @@ class mainWindow(QMainWindow):
 
     def createControls(self):
         # self.statusBar().setStyleSheet("QStatusBar{background:rgba(204,229,255,255);color:black;border: 1px solid blue; border-radius: 1px;}")
-        self.statusBar().setStyleSheet("QStatusBar{background:rgba(192,192,192,255);color:black;border: 1px solid blue; border-radius: 1px;}")
+        self.statusBar().setStyleSheet(sparrowtheme.status_bar_style(self.themeName))
         if GPSEngine.GPSDRunning():
             self.gpsEngine.start()
             self.statusBar().showMessage('Local gpsd Found.  System Ready.')
@@ -1157,6 +1166,18 @@ class mainWindow(QMainWindow):
         self.menuResetColumns.setStatusTip('Reset the network table columns to their default widths')
         self.menuResetColumns.triggered.connect(self.onResetColumns)
         settingsMenu.addAction(self.menuResetColumns)
+
+        # Theme: Auto (follow the system) / Light / Dark. Exclusive radio group.
+        themeMenu = settingsMenu.addMenu('Theme')
+        self.themeActionGroup = QActionGroup(self)
+        self.themeActionGroup.setExclusive(True)
+        for label, value in [('Auto (system)', 'auto'), ('Light', 'light'), ('Dark', 'dark')]:
+            act = QAction(label, self, checkable=True)
+            act.setChecked(self.themePref == value)
+            act.setStatusTip('Set the UI theme to ' + label)
+            act.triggered.connect(lambda checked, v=value: self.onSetTheme(v))
+            self.themeActionGroup.addAction(act)
+            themeMenu.addAction(act)
 
         # View Menu: per-column visibility toggles for the network table.
         viewMenu = menubar.addMenu('&View')
@@ -2609,6 +2630,20 @@ class mainWindow(QMainWindow):
         # View menu: show/hide a single network-table column.
         self.networkTable.setColumnHidden(col, not checked)
 
+    def onSetTheme(self, pref):
+        # Settings > Theme: apply and persist a theme preference. Palette changes
+        # propagate to open windows; the status bar (explicit stylesheet) is
+        # restyled directly. Data panels (table/charts) stay dark by design.
+        self.themePref = pref
+        self.themeName = sparrowtheme.resolve_theme(pref)
+        _app = QApplication.instance()
+        sparrowtheme.apply_theme(_app, self.themeName)
+        _app.setProperty('sparrowThemePref', self.themePref)
+        _app.setProperty('sparrowThemeName', self.themeName)
+        self.statusBar().setStyleSheet(sparrowtheme.status_bar_style(self.themeName))
+        QSettings().setValue('ui/theme', pref)
+        self.statusBar().showMessage('Theme set to ' + pref + ' (' + self.themeName + ')')
+
     def onToggleChannelGraphs(self, checked):
         # View menu: show/hide the 2.4/5 GHz channel graphs. When hidden, the
         # scan table expands to fill the window (relayout via resizeEvent).
@@ -3907,10 +3942,26 @@ if __name__ == '__main__':
     argparser = argparse.ArgumentParser(description='Sparrow-WiFi')
     argparser.add_argument('--scan-delay', type=float, default=None,
                            help='Delay in seconds between successive scans (default 1.5)')
+    argparser.add_argument('--theme', choices=['auto', 'light', 'dark'], default=None,
+                           help='UI theme: auto (follow the system, default), light, or dark')
     # parse_known_args so any Qt/X args pass through untouched
     parsedArgs, remainingArgs = argparser.parse_known_args()
 
     app = QApplication([sys.argv[0]] + remainingArgs)
+
+    # Theme: resolve the preference (CLI overrides the saved setting) and apply
+    # the palette BEFORE building the window, so it renders themed from frame 1.
+    QApplication.setOrganizationName('UltronCORE')
+    QApplication.setApplicationName('sparrow-wifi')
+    if parsedArgs.theme is not None:
+        themePref = parsedArgs.theme
+    else:
+        themePref = QSettings().value('ui/theme', 'auto', type=str)
+    themeName = sparrowtheme.resolve_theme(themePref)
+    sparrowtheme.apply_theme(app, themeName)
+    app.setProperty('sparrowThemePref', themePref)
+    app.setProperty('sparrowThemeName', themeName)
+
     mainWin = mainWindow()
     if parsedArgs.scan_delay is not None:
         mainWin.setScanDelay(parsedArgs.scan_delay)
