@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QApplication, QLabel, QCo
 from PyQt5.QtWidgets  import QFileDialog, QSpinBox, QDesktopWidget, QMessageBox, QTableWidget, QHeaderView,QTableWidgetItem,  QMenu, QAction
 from sparrowtablewidgets import DateTableWidgetItem, FloatTableWidgetItem, IntTableWidgetItem
 import sparrowtheme
-from PyQt5.QtCore import Qt,QTimer
+from PyQt5.QtCore import Qt,QTimer,QSettings
 from PyQt5 import QtCore
 
 from socket import *
@@ -41,6 +41,8 @@ from sparrowmap import MapEngineBase,  MapEngineOSM
 from sparrowwifiagent import FileSystemFile
 from sparrowbluetooth import BluetoothDevice
 from telemetry import BluetoothTelemetry
+from telemetry import signalToQColor, getSignalColorThresholds, SIGNAL_KEYS
+from PyQt5.QtGui import QBrush
 from sparrowmap import MapMarker
 from wirelessengine import WirelessEngine
 
@@ -445,6 +447,89 @@ class DBSettingsDialog(QDialog):
         # date = dialog.dateTime()
         dbSettings = dialog.getDBSettings()
         return (dbSettings, result == QDialog.Accepted)
+
+# ------------------  Signal Strength Color Settings  ------------------------------
+class SignalColorSettingsDialog(QDialog):
+    # Lets the user tune the recommended signal-strength thresholds (dBm) that
+    # drive the telemetry tracker and the RSSI/signal columns: >= good is green,
+    # >= fair is orange, anything weaker is red. WiFi and Bluetooth are tuned
+    # separately (BLE RSSI reads weaker). Values are persisted via QSettings.
+    def __init__(self, parent = None):
+        super(SignalColorSettingsDialog, self).__init__(parent)
+
+        self.lblIntro = QLabel("Signal strength (dBm) at or above which a reading\n"
+                               "is drawn in each color, per radio:", self)
+        self.lblIntro.setGeometry(20, 12, 400, 40)
+
+        # One section of spin boxes per kind; the spin boxes are stored by kind
+        # so getThresholds()/getSettings() can iterate generically.
+        self.spins = {}   # kind -> (spinGood, spinFair)
+        self._addSection('wifi', "WiFi", 55)
+        self._addSection('bluetooth', "Bluetooth", 150)
+
+        self.lblPoor = QLabel("Weaker signals are drawn in red.", self)
+        self.lblPoor.setGeometry(30, 250, 350, 25)
+
+        # OK and Cancel buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            Qt.Horizontal, self)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        buttons.move(120, 290)
+
+        self.setGeometry(self.geometry().x(), self.geometry().y(), 420, 335)
+        self.setWindowTitle("Signal Strength Colors")
+
+    def _addSection(self, kind, title, y):
+        good, fair = getSignalColorThresholds(kind)
+
+        lblTitle = QLabel("<b>" + title + "</b>", self)
+        lblTitle.setGeometry(20, y, 200, 22)
+
+        lblGood = QLabel("Green (strong) ≥", self)
+        lblGood.setGeometry(30, y + 28, 130, 25)
+        spinGood = QSpinBox(self)
+        spinGood.setRange(-100, 0)
+        spinGood.setSuffix(" dBm")
+        spinGood.setValue(good)
+        spinGood.setGeometry(170, y + 26, 100, 28)
+
+        lblFair = QLabel("Orange (usable) ≥", self)
+        lblFair.setGeometry(30, y + 60, 130, 25)
+        spinFair = QSpinBox(self)
+        spinFair.setRange(-100, 0)
+        spinFair.setSuffix(" dBm")
+        spinFair.setValue(fair)
+        spinFair.setGeometry(170, y + 58, 100, 28)
+
+        self.spins[kind] = (spinGood, spinFair)
+
+    def getThresholds(self):
+        # Returns {kind: (good, fair)}, keeping good >= fair so bands never invert.
+        result = {}
+        for kind, (spinGood, spinFair) in self.spins.items():
+            good = spinGood.value()
+            fair = spinFair.value()
+            if fair > good:
+                good, fair = fair, good
+            result[kind] = (good, fair)
+        return result
+
+    # static method to show the dialog, persist the result, and report thresholds
+    @staticmethod
+    def getSettings(parent = None):
+        dialog = SignalColorSettingsDialog(parent)
+        result = dialog.exec_()
+        accepted = result == QDialog.Accepted
+        thresholds = dialog.getThresholds()
+        if accepted:
+            settings = QSettings()
+            for kind, (good, fair) in thresholds.items():
+                goodKey, fairKey, _, _ = SIGNAL_KEYS[kind]
+                settings.setValue(goodKey, good)
+                settings.setValue(fairKey, fair)
+        return (thresholds, accepted)
 
 class MapSettings(object):
     def __init__(self):
@@ -1480,6 +1565,7 @@ class BluetoothDialog(QDialog):
 
                             self.bluetoothTable.item(curRow,2).setText(curDevice.name)
                             self.bluetoothTable.item(curRow, 6).setText(str(curDevice.rssi))
+                            self.bluetoothTable.item(curRow, 6).setForeground(QBrush(signalToQColor(curDevice.rssi, 'bluetooth')))
 
                             if curDevice.txPowerValid:
                                 self.bluetoothTable.item(curRow, 7).setText(str(curDevice.txPower))
@@ -1530,7 +1616,9 @@ class BluetoothDialog(QDialog):
                 else:
                     self.bluetoothTable.setItem(rowPosition,5, QTableWidgetItem('Classic'))
 
-                self.bluetoothTable.setItem(rowPosition, 6, IntTableWidgetItem(str(curDevice.rssi)))
+                rssiItem = IntTableWidgetItem(str(curDevice.rssi))
+                rssiItem.setForeground(QBrush(signalToQColor(curDevice.rssi, 'bluetooth')))
+                self.bluetoothTable.setItem(rowPosition, 6, rssiItem)
 
                 if curDevice.txPowerValid:
                     self.bluetoothTable.setItem(rowPosition, 7, IntTableWidgetItem(str(curDevice.txPower)))

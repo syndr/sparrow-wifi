@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import QTableWidget, QHeaderView,QTableWidgetItem, QMessage
 #from PyQt5.QtCore import Qt
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore
-from PyQt5.QtCore import Qt, QMargins
+from PyQt5.QtCore import Qt, QMargins, QSettings
 from PyQt5.QtChart import QChart, QChartView, QLineSeries, QValueAxis
 from PyQt5.QtGui import QPen, QFont, QBrush, QColor, QPainter
 from PyQt5.QtWidgets import QPushButton
@@ -43,13 +43,69 @@ from threading import Lock
 
 # https://matplotlib.org/examples/user_interfaces/embedding_in_qt5.html
 
+# Recommended signal-strength thresholds (dBm) used to color the telemetry
+# tracker and the RSSI/signal columns. Signal is negative dBm, closer to zero
+# being stronger:
+#   signal >= GOOD           -> green  (strong, reliable)
+#   FAIR <= signal <  GOOD   -> orange (usable)
+#   signal <  FAIR           -> red    (weak)
+# WiFi and Bluetooth get separate thresholds: BLE RSSI reads weaker for the same
+# usable experience, so its defaults sit lower. The thresholds are
+# user-configurable via Settings > Signal Strength Colors.
+DEFAULT_SIGNAL_GOOD_DBM = -60
+DEFAULT_SIGNAL_FAIR_DBM = -75
+DEFAULT_BT_GOOD_DBM = -70
+DEFAULT_BT_FAIR_DBM = -85
+
+# QSettings keys, keyed by signal "kind". getSignalColorThresholds/signalToColor
+# take a kind ('wifi' or 'bluetooth') so both share one code path.
+SIGNAL_KEYS = {
+    'wifi':      ('telemetry/signalGoodDbm', 'telemetry/signalFairDbm',
+                  DEFAULT_SIGNAL_GOOD_DBM, DEFAULT_SIGNAL_FAIR_DBM),
+    'bluetooth': ('telemetry/btGoodDbm', 'telemetry/btFairDbm',
+                  DEFAULT_BT_GOOD_DBM, DEFAULT_BT_FAIR_DBM),
+}
+
+def getSignalColorThresholds(kind='wifi'):
+    # Returns (good, fair) dBm thresholds for the given kind from settings,
+    # falling back to the recommended defaults. good is always kept >= fair so
+    # the bands are sane.
+    goodKey, fairKey, goodDef, fairDef = SIGNAL_KEYS[kind]
+    settings = QSettings()
+    good = settings.value(goodKey, goodDef, type=int)
+    fair = settings.value(fairKey, fairDef, type=int)
+    if fair > good:
+        good, fair = fair, good
+    return good, fair
+
+def signalToColor(signalDbm, kind='wifi'):
+    # Map a signal strength (negative dBm) to a tracker color band.
+    good, fair = getSignalColorThresholds(kind)
+    if signalDbm >= good:
+        return 'green'
+    elif signalDbm >= fair:
+        return 'orange'
+    else:
+        return 'red'
+
+# Qt equivalents of the tracker color bands, for coloring table cells with the
+# same configurable thresholds. Tuned to read against the dark scan-table rows.
+SIGNAL_QCOLORS = {'green': QColor(0, 200, 0),
+                  'orange': QColor(255, 165, 0),
+                  'red': QColor(255, 80, 80)}
+
+def signalToQColor(signalDbm, kind='wifi'):
+    return SIGNAL_QCOLORS[signalToColor(signalDbm, kind)]
+
 class RadarWidget(FigureCanvas):
-    def __init__(self, parent=None, useBlackoutColors=True, width=4, height=4, dpi=100):
+    def __init__(self, parent=None, useBlackoutColors=True, width=4, height=4, dpi=100, signalKind='wifi'):
         # fig = Figure(figsize=(width, height), dpi=dpi)
         # self.axes = fig.add_subplot(111)
         # -----------------------------------------------------------
         # fig = plt.figure()
         # useBlackoutColors = False
+        # signalKind selects the color thresholds ('wifi' or 'bluetooth').
+        self.signalKind = signalKind
         self.useBlackoutColors = useBlackoutColors
         if self.useBlackoutColors:
             self.fontColor = 'white'
@@ -105,15 +161,19 @@ class RadarWidget(FigureCanvas):
         FigureCanvas.updateGeometry(self)
 
     def updateData(self, radius):
+        # radius is the signal strength made positive (signal * -1), so the
+        # actual dBm is -radius. Color the tracker by the recommended bands.
+        signalColor = signalToColor(-radius, self.signalKind)
+
         if self.redline is not None:
             self.redline.pop(0).remove()
-        self.redline = self.axes.plot(np.linspace(0, 2*np.pi, 100), np.ones(100)*radius, color='r', linestyle='-')
+        self.redline = self.axes.plot(np.linspace(0, 2*np.pi, 100), np.ones(100)*radius, color=signalColor, linestyle='-')
 
         if self.filledcircle:
             self.filledcircle.remove()
-            
+
         self.bullseye.remove()
-        circle = plt.Circle((0.0, 0.0), radius, transform=self.axes.transData._b, color="red", alpha=0.4)
+        circle = plt.Circle((0.0, 0.0), radius, transform=self.axes.transData._b, color=signalColor, alpha=0.4)
         self.filledcircle = self.axes.add_artist(circle)
         # Create bullseye
         circle = plt.Circle((0.0, 0.0), 20, transform=self.axes.transData._b, color=self.fontColor, alpha=0.4)
@@ -544,7 +604,9 @@ class TelemetryDialog(QDialog):
         newSSID = QTableWidgetItem(tmpssid)
         
         self.locationTable.setItem(rowPosition, 1, newSSID)
-        self.locationTable.setItem(rowPosition, 2,  IntTableWidgetItem(str(curNet.signal)))
+        signalItem = IntTableWidgetItem(str(curNet.signal))
+        signalItem.setForeground(QBrush(signalToQColor(curNet.signal)))
+        self.locationTable.setItem(rowPosition, 2, signalItem)
         self.locationTable.setItem(rowPosition, 3, DateTableWidgetItem(curNet.lastSeen.strftime("%m/%d/%Y %H:%M:%S")))
         if curNet.gps.isValid:
             self.locationTable.setItem(rowPosition, 4, QTableWidgetItem('Yes'))
@@ -596,6 +658,8 @@ class TelemetryDialog(QDialog):
 class BluetoothTelemetry(TelemetryDialog):
     def __init__(self, winTitle = "Bluetooth Telemetry", parent = None):
         super().__init__(winTitle, parent)
+        # Color the shared tracker by Bluetooth RSSI thresholds, not WiFi.
+        self.radar.signalKind = 'bluetooth'
 
     def createTable(self):
         # Set up location table
@@ -748,7 +812,9 @@ class BluetoothTelemetry(TelemetryDialog):
         # ['macAddr','name', 'rssi','tx power','est range (m)', 'Timestamp','GPS', 'Latitude', 'Longitude', 'Altitude']
         self.locationTable.setItem(rowPosition, 0, QTableWidgetItem(curDevice.macAddress))
         self.locationTable.setItem(rowPosition, 1, QTableWidgetItem(curDevice.name))
-        self.locationTable.setItem(rowPosition, 2,  IntTableWidgetItem(str(curDevice.rssi)))
+        rssiItem = IntTableWidgetItem(str(curDevice.rssi))
+        rssiItem.setForeground(QBrush(signalToQColor(curDevice.rssi, 'bluetooth')))
+        self.locationTable.setItem(rowPosition, 2, rssiItem)
         
         if curDevice.txPowerValid:
             self.locationTable.setItem(rowPosition, 3,  IntTableWidgetItem(str(curDevice.txPower)))
