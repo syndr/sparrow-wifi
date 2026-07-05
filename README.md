@@ -64,16 +64,6 @@ Typing in the Filter box (here <code>Ult</code>) hides non-matching rows and spo
 Font-sized columns and per-radio RSSI coloring (BLE thresholds default weaker than WiFi).
 </details>
 
-<details>
-<summary><b>Telemetry / source tracking &mdash; themed</b></summary>
-
-<p align="center">
-  <img src="./images/wifi_telemetry_themed.png" width="800"/>
-</p>
-
-Themed telemetry chart and table, with button state conveyed in the label (Pause Table, Streaming Save).
-</details>
-
 ---
 
 ## What's New (April 2026)
@@ -108,7 +98,7 @@ The original Sparrow application provides a comprehensive GUI-based replacement 
 </p>
 
 <p align="center">
-  <img src="./telemetry-screenshot.png" width="600"/>
+  <img src="./images/telemetry_dark.png" width="800"/>
 </p>
 
 ---
