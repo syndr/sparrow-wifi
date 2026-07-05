@@ -707,11 +707,22 @@ class WirelessEngine(object):
         return retCode, errString, jsonstr
         
     def scanForNetworks(interfaceName, frequency=0, printResults=False):
-        
+
+        # 'iw scan' can hang indefinitely when the driver/interface gets into a
+        # stuck state (common under continuous rapid scanning, or when another
+        # process like NetworkManager is also scanning). Without a timeout the
+        # calling scan thread blocks forever, which both stops result updates and
+        # makes the Stop button hang (it waits on a thread that never returns).
+        # Time out, kill the child, and report busy so callers retry gracefully.
         if frequency == 0:
-            result = subprocess.run(['iw', 'dev', interfaceName, 'scan'], stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            cmd = ['iw', 'dev', interfaceName, 'scan']
         else:
-            result = subprocess.run(['iw', 'dev', interfaceName, 'scan', 'freq', str(frequency)], stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            cmd = ['iw', 'dev', interfaceName, 'scan', 'freq', str(frequency)]
+
+        try:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
+        except subprocess.TimeoutExpired:
+            return WirelessNetwork.ERR_DEVICEBUSY, 'Scan timed out (interface busy or unresponsive)', {}
 
         retCode = result.returncode
         errString = ""

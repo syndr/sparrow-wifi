@@ -503,12 +503,12 @@ class ScanThread(BaseThreadClass):
         super().__init__()
         self.interface = interface
         self.mainWin = mainWin
-        self.scanDelay = 0.5  # seconds
+        self.scanDelay = 1.5  # seconds
         self.channelList = channelList
-        
+
     def run(self):
         self.threadRunning = True
-        
+
         while (not self.signalStop):
             # Scan all / normal mode
             if (self.channelList is None) or (len(self.channelList) == 0):
@@ -581,7 +581,7 @@ class RemoteScanThread(BaseThreadClass):
         super().__init__()
         self.interface = interface
         self.mainWin = mainWin
-        self.scanDelay = 0.5  # seconds
+        self.scanDelay = 1.5  # seconds
         self.remoteAgentIP = "127.0.0.1"
         self.remoteAgentPort = 8020
         self.channelList = channelList
@@ -737,7 +737,9 @@ class mainWindow(QMainWindow):
         self._vendorCache = {}
         self._tableUpdateInProgress = False
         self.scanThread = None
-        self.scanDelay = 0.5
+        # Delay between successive scans. 0.5s hammered the driver into a busy/stuck
+        # state; 1.5s is gentler. Override with --scan-delay or Settings > Scan Interval.
+        self.scanDelay = 1.5
         self.scanresults.connect(self.scanResults)
         self.singleshotscanresults.connect(self.onSingleShotScanResults)
         self.scanresultsfromadvanced.connect(self.scanResultsFromAdvanced)
@@ -751,7 +753,7 @@ class mainWindow(QMainWindow):
         self.remoteScanIsBlocking = False
         self.remoteScanThread = None
         self.remoteSingleShotThread = None
-        self.remoteScanDelay = 0.5
+        self.remoteScanDelay = 1.5
         self.lastRemoteState = False
         self.remoteAgentUp = False
         self.remoteHasHackrf = False
@@ -762,8 +764,29 @@ class mainWindow(QMainWindow):
         desktopSize = QApplication.desktop().screenGeometry()
         #self.mainWidth=1024
         #self.mainHeight=768
-        self.mainWidth = desktopSize.width() * 3 // 4
-        self.mainHeight = desktopSize.height() * 3 // 4
+        self.screenWidth = desktopSize.width()
+        # Small screens (e.g. the uConsole at 1280px) can't fit the full
+        # 14-column table at 3/4 width; open full-size and hide low-value
+        # columns (see applyColumnLayout) so it fits without side-scrolling.
+        self.smallScreen = self.screenWidth <= 1280
+        if self.smallScreen:
+            self.mainWidth = desktopSize.width()
+            self.mainHeight = desktopSize.height()
+        else:
+            self.mainWidth = desktopSize.width() * 3 // 4
+            self.mainHeight = desktopSize.height() * 3 // 4
+
+        # Network table columns. Defined here (before initUI/createMenu) so both
+        # the table and the View menu's per-column visibility toggles share one
+        # source of truth. Columns hidden by default on small screens:
+        self.networkColumns = ['macAddr', 'vendor', 'SSID', 'Security', 'Privacy',
+                               'Channel', 'Frequency', 'Signal Strength', 'Bandwidth',
+                               '% Utilization', 'Stations', 'Last Seen', 'First Seen', 'GPS']
+        self.smallScreenHiddenColumns = [1, 6, 9, 10, 12]  # vendor, Frequency, %Util, Stations, First Seen
+        self.columnMenuActions = []
+        # When False, the 2.4/5 GHz channel graphs are hidden and the scan table
+        # takes the full window height (View > Channel Graphs).
+        self.showChannelGraphs = True
         
         self.initUI()
         
@@ -855,10 +878,14 @@ class mainWindow(QMainWindow):
         elif dividerPos.y() > size.height()-180:
             dividerPos.setY(size.height()-180)
             
-        self.horizontalDivider.setGeometry(dividerPos.x(), dividerPos.y(), size.width()-2, 5)
-        self.networkTable.setGeometry(10, 103, size.width()-20, dividerPos.y()-105)
-        self.Plot24.setGeometry(10, dividerPos.y()+6, int(size.width()/2)-10, size.height()-dividerPos.y()-30)
-        self.Plot5.setGeometry(int(size.width()/2)+5, dividerPos.y()+6,int(size.width()/2)-15, size.height()-dividerPos.y()-30)
+        if self.showChannelGraphs:
+            self.horizontalDivider.setGeometry(dividerPos.x(), dividerPos.y(), size.width()-2, 5)
+            self.networkTable.setGeometry(10, 103, size.width()-20, dividerPos.y()-105)
+            self.Plot24.setGeometry(10, dividerPos.y()+6, int(size.width()/2)-10, size.height()-dividerPos.y()-30)
+            self.Plot5.setGeometry(int(size.width()/2)+5, dividerPos.y()+6,int(size.width()/2)-15, size.height()-dividerPos.y()-30)
+        else:
+            # Graphs hidden: the scan table takes the full content area.
+            self.networkTable.setGeometry(10, 103, size.width()-20, size.height()-133)
 
     def createControls(self):
         # self.statusBar().setStyleSheet("QStatusBar{background:rgba(204,229,255,255);color:black;border: 1px solid blue; border-radius: 1px;}")
@@ -922,17 +949,27 @@ class mainWindow(QMainWindow):
         self.cbAgeOut.move(10, 70)
         self.lblAgeOut = QLabel("Remove networks not seen in the past 3 minutes", self)
         self.lblAgeOut.setGeometry(30, 70, 300, 30)
-        
+
+        # Network filter: live-hide table rows that don't match the typed text.
+        self.lblFilter = QLabel("Filter:", self)
+        self.lblFilter.setGeometry(350, 70, 40, 30)
+        self.networkFilter = QLineEdit(self)
+        self.networkFilter.setGeometry(395, 70, 260, 30)
+        self.networkFilter.setPlaceholderText('SSID / MAC / vendor...')
+        self.networkFilter.setStatusTip('Show only rows matching this text (SSID, MAC, or vendor). Case-insensitive; clear to show all.')
+        self.networkFilter.setClearButtonEnabled(True)
+        self.networkFilter.textChanged.connect(self.onFilterChanged)
+
         # Network Table
         self.networkTable = QTableWidget(self)
-        self.networkTable.setColumnCount(14)
+        self.networkTable.setColumnCount(len(self.networkColumns))
         # self.networkTable.setGeometry(10, 100, self.mainWidth-60, self.mainHeight/2-105)
         self.networkTable.setShowGrid(True)
         # self.networkTable.setHorizontalHeaderLabels(['macAddr', 'vendor','SSID', 'Security', 'Privacy', 'Channel', 'Frequency', 'Signal Strength', 'Bandwidth', 'Last Seen', 'First Seen', 'GPS'])
-        self.networkTable.setHorizontalHeaderLabels(['macAddr', 'vendor','SSID', 'Security', 'Privacy', 'Channel', 'Frequency', 'Signal Strength', 'Bandwidth', '% Utilization','Stations','Last Seen', 'First Seen', 'GPS'])
-        self.networkTable.resizeColumnsToContents()
+        self.networkTable.setHorizontalHeaderLabels(self.networkColumns)
         self.networkTable.setRowCount(0)
-        self.networkTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.applyColumnLayout()
+        self.applyDefaultColumnVisibility()
 
         self.networkTable.horizontalHeader().sectionClicked.connect(self.onTableHeadingClicked)
         self.networkTable.cellClicked.connect(self.onTableClicked)
@@ -1108,7 +1145,39 @@ class mainWindow(QMainWindow):
         self.menuRemoteAgentConfig.setStatusTip('Configure a remote agent')
         self.menuRemoteAgentConfig.triggered.connect(self.onRemoteAgentConfig)
         helpMenu.addAction(self.menuRemoteAgentConfig)
-        
+
+        # Settings Menu Items
+        settingsMenu = menubar.addMenu('&Settings')
+        self.menuScanInterval = QAction('Scan Interval...', self)
+        self.menuScanInterval.setStatusTip('Set the delay (in seconds) between successive scans')
+        self.menuScanInterval.triggered.connect(self.onSetScanInterval)
+        settingsMenu.addAction(self.menuScanInterval)
+
+        self.menuResetColumns = QAction('Reset Column Widths', self)
+        self.menuResetColumns.setStatusTip('Reset the network table columns to their default widths')
+        self.menuResetColumns.triggered.connect(self.onResetColumns)
+        settingsMenu.addAction(self.menuResetColumns)
+
+        # View Menu: per-column visibility toggles for the network table.
+        viewMenu = menubar.addMenu('&View')
+        columnsMenu = viewMenu.addMenu('Table Columns')
+        self.columnMenuActions = []
+        for idx, name in enumerate(self.networkColumns):
+            act = QAction(name, self, checkable=True)
+            # Reflect the default visibility (some columns hidden on small screens).
+            act.setChecked(not (self.smallScreen and idx in self.smallScreenHiddenColumns))
+            act.setStatusTip('Show/hide the "' + name + '" column')
+            act.triggered.connect(lambda checked, col=idx: self.onToggleColumn(col, checked))
+            columnsMenu.addAction(act)
+            self.columnMenuActions.append(act)
+
+        viewMenu.addSeparator()
+        self.menuChannelGraphs = QAction('Channel Graphs', self, checkable=True)
+        self.menuChannelGraphs.setChecked(True)
+        self.menuChannelGraphs.setStatusTip('Show/hide the 2.4/5 GHz channel graphs (table fills the window when hidden)')
+        self.menuChannelGraphs.triggered.connect(self.onToggleChannelGraphs)
+        viewMenu.addAction(self.menuChannelGraphs)
+
         # GPS Menu Items
         gpsMenu = menubar.addMenu('&Geo')
         newAct = QAction('Create Access Point Map', self)        
@@ -2487,6 +2556,88 @@ class mainWindow(QMainWindow):
         # Need to reset the shortcut after changing the text
         self.btnScan.setShortcut('Ctrl+S')
 
+    def setScanDelay(self, seconds):
+        # Apply a new inter-scan delay. Also pushes it to any running scan thread
+        # so the change takes effect without restarting the scan.
+        self.scanDelay = seconds
+        self.remoteScanDelay = seconds
+        if self.scanThread:
+            self.scanThread.scanDelay = seconds
+        if self.remoteScanThread:
+            self.remoteScanThread.scanDelay = seconds
+
+    def onSetScanInterval(self):
+        value, okPressed = QInputDialog.getDouble(self, "Scan Interval",
+                                                  "Delay between scans (seconds):",
+                                                  self.scanDelay, 0.0, 60.0, 1)
+        if okPressed:
+            self.setScanDelay(value)
+            self.statusBar().showMessage('Scan interval set to ' + str(value) + ' seconds')
+
+    def applyColumnLayout(self):
+        # Deterministic column sizing so widths don't have to be dragged every
+        # launch. SSID (col 2) stretches to absorb slack; the rest get compact
+        # defaults and stay user-draggable (Interactive). Modes set here persist
+        # across the per-scan row updates, so this only runs once at construction
+        # (and again from the Reset Column Widths menu action). Visibility is
+        # handled separately (applyDefaultColumnVisibility + the View menu) so a
+        # width reset does not undo the user's chosen visible columns.
+        hdr = self.networkTable.horizontalHeader()
+        # column index -> default width (px). Col 2 (SSID) is omitted; it stretches.
+        defaultWidths = {0: 130, 1: 140, 3: 90, 4: 60, 5: 60, 6: 70, 7: 90,
+                         8: 80, 9: 80, 10: 60, 11: 130, 12: 130, 13: 45}
+        for col, width in defaultWidths.items():
+            hdr.setSectionResizeMode(col, QHeaderView.Interactive)
+            self.networkTable.setColumnWidth(col, width)
+        hdr.setSectionResizeMode(2, QHeaderView.Stretch)
+
+    def applyDefaultColumnVisibility(self):
+        # On small screens (uConsole) hide low-value columns so the rest fit
+        # without a horizontal scrollbar; show all on larger screens. Keeps the
+        # View menu's checkmarks in sync with the actual table state.
+        for col in range(self.networkTable.columnCount()):
+            hidden = self.smallScreen and (col in self.smallScreenHiddenColumns)
+            self.networkTable.setColumnHidden(col, hidden)
+            if col < len(self.columnMenuActions):
+                self.columnMenuActions[col].setChecked(not hidden)
+
+    def onResetColumns(self):
+        self.applyColumnLayout()
+        self.statusBar().showMessage('Column widths reset')
+
+    def onToggleColumn(self, col, checked):
+        # View menu: show/hide a single network-table column.
+        self.networkTable.setColumnHidden(col, not checked)
+
+    def onToggleChannelGraphs(self, checked):
+        # View menu: show/hide the 2.4/5 GHz channel graphs. When hidden, the
+        # scan table expands to fill the window (relayout via resizeEvent).
+        self.showChannelGraphs = checked
+        self.horizontalDivider.setVisible(checked)
+        self.Plot24.setVisible(checked)
+        self.Plot5.setVisible(checked)
+        self.resizeEvent(None)
+
+    def onFilterChanged(self):
+        self.applyNetworkFilter()
+
+    def applyNetworkFilter(self):
+        # Hide rows whose MAC (col 0), vendor (col 1), or SSID (col 2) don't
+        # contain the filter text. Empty filter shows everything. Re-run after
+        # every table repopulate so newly-seen networks obey the active filter.
+        filterText = self.networkFilter.text().strip().lower()
+        for row in range(self.networkTable.rowCount()):
+            if not filterText:
+                self.networkTable.setRowHidden(row, False)
+                continue
+            match = False
+            for col in (0, 1, 2):
+                item = self.networkTable.item(row, col)
+                if item is not None and filterText in item.text().lower():
+                    match = True
+                    break
+            self.networkTable.setRowHidden(row, not match)
+
     def onScanClicked(self, pressed):
         if self.menuRemoteAgent.isChecked():
             # We're in remote mode.  Let's handle it there
@@ -2984,13 +3135,17 @@ class mainWindow(QMainWindow):
 
         self.ageOut()
 
-        if firstTableLoad:
-            self.networkTable.resizeColumnsToContents()
-            
+        # Column widths are set once by applyColumnLayout() at construction and
+        # persist across scans; we intentionally do NOT resize-to-contents here
+        # (that overflowed small screens and reset the user's widths each launch).
+
         if addedNetworks > 0:
             if self.networkTableSortIndex >=0:
                 self.networkTable.sortItems(self.networkTableSortIndex, self.networkTableSortOrder )
-                
+
+        # Re-apply the active filter so newly-added rows respect it.
+        self.applyNetworkFilter()
+
         self.checkTelemetryWindows()
         
         # Last formatting tweaks on network table
@@ -3748,8 +3903,17 @@ if __name__ == '__main__':
             from falconwifidialogs import AdvancedScanDialog
             hasFalcon = True
             
-    app = QApplication(sys.argv)
+    import argparse
+    argparser = argparse.ArgumentParser(description='Sparrow-WiFi')
+    argparser.add_argument('--scan-delay', type=float, default=None,
+                           help='Delay in seconds between successive scans (default 1.5)')
+    # parse_known_args so any Qt/X args pass through untouched
+    parsedArgs, remainingArgs = argparser.parse_known_args()
+
+    app = QApplication([sys.argv[0]] + remainingArgs)
     mainWin = mainWindow()
+    if parsedArgs.scan_delay is not None:
+        mainWin.setScanDelay(parsedArgs.scan_delay)
     result = app.exec_()
     sys.exit(result)
     # Some thread is still blocking...
