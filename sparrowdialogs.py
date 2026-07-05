@@ -1127,18 +1127,18 @@ class BluetoothDialog(QDialog):
         self.btnScan = QPushButton("&Scan", self)
         self.btnScan.setCheckable(True)
         self.btnScan.setShortcut('Ctrl+S')
-        self.btnScan.setStyleSheet("background-color: rgba(0,128,192,255); border: none;")
+        sparrowtheme.themed_button(self.btnScan)
         self.btnScan.setGeometry(310, 12, 120, 27)
         self.btnScan.clicked[bool].connect(self.onScanClicked)
 
         # Map Button
         self.btnMap = QPushButton("&Map", self)
-        self.btnMap.setStyleSheet("background-color: rgba(0,128,192,255);")
+        sparrowtheme.themed_button(self.btnMap)
         self.btnMap.clicked.connect(self.onMap)
 
         # Export Button
         self.btnExport = QPushButton("&Export", self)
-        self.btnExport.setStyleSheet("background-color: rgba(0,128,192,255);")
+        sparrowtheme.themed_button(self.btnExport)
         self.btnExport.clicked.connect(self.onExportClicked)
 
         # Data table
@@ -1242,7 +1242,7 @@ class BluetoothDialog(QDialog):
         self.usingRemoteAgent = False
 
         self.updateWindowTitle()
-        self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+        sparrowtheme.themed_button(self.btnScan)
         self.btnScan.setText('&Scan')
         self.comboScanType.setEnabled(True)
         self.fillScanTypes()
@@ -1269,17 +1269,17 @@ class BluetoothDialog(QDialog):
 
         if errcode == 0:
             if discoveryScanRunning:
-                self.btnScan.setStyleSheet("background-color: rgba(255,0,0,255); border: none;")
+                sparrowtheme.themed_button(self.btnScan)
                 self.btnScan.setText('&Stop scanning')
                 self.comboScanType.setEnabled(False)
             else:
-                self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+                sparrowtheme.themed_button(self.btnScan)
                 self.btnScan.setText('&Scan')
                 self.comboScanType.setEnabled(True)
         else:
                 QMessageBox.question(self, 'Error',"Error getting remote agent discovery status: " + errmsg, QMessageBox.Ok)
 
-                self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+                sparrowtheme.themed_button(self.btnScan)
                 self.btnScan.setText('&Scan')
                 self.comboScanType.setEnabled(True)
 
@@ -1308,7 +1308,7 @@ class BluetoothDialog(QDialog):
             else:
                 ubertooth = False
 
-            self.btnScan.setStyleSheet("background-color: rgba(255,0,0,255); border: none;")
+            sparrowtheme.themed_button(self.btnScan)
             self.btnScan.setText('&Stop scanning')
             self.comboScanType.setEnabled(False)
 
@@ -1323,7 +1323,7 @@ class BluetoothDialog(QDialog):
                 if errcode != 0:
                     QMessageBox.question(self, 'Error',"Could not start remote scan: " + errmsg, QMessageBox.Ok)
                     self.btnScan.setChecked(False)
-                    self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+                    sparrowtheme.themed_button(self.btnScan)
                     self.btnScan.setText('&Scan')
                     self.comboScanType.setEnabled(True)
                     return
@@ -1332,7 +1332,7 @@ class BluetoothDialog(QDialog):
         else:
             self.btTimer.stop()
 
-            self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+            sparrowtheme.themed_button(self.btnScan)
             self.btnScan.setText('&Scan')
             self.comboScanType.setEnabled(True)
             self.setCursor(Qt.WaitCursor)

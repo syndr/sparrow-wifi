@@ -212,6 +212,13 @@ def size_table_columns(table, samples, stretch_col, padding=26):
     hdr.setSectionResizeMode(stretch_col, QHeaderView.Stretch)
 
 
+def themed_button(btn):
+    # Follow the active theme's palette (clears any inline color so a runtime
+    # theme switch is tracked automatically). Button state is conveyed by label
+    # text (e.g. Scan/Stop scanning, Pause/Resume) rather than a background color.
+    btn.setStyleSheet("")
+
+
 def apply_theme(app, themeName):
     # Apply a resolved theme ('dark' or 'light') to the whole application.
     # Fusion is used because it honors custom palettes consistently, unlike the

@@ -157,18 +157,37 @@ class TelemetryDialog(QDialog):
        
         self.btnExport = QPushButton("Export Table", self)
         self.btnExport.clicked[bool].connect(self.onExportClicked)
-        self.btnExport.setStyleSheet("background-color: rgba(2,128,192,255);")
+        sparrowtheme.themed_button(self.btnExport)
 
         self.btnPause = QPushButton("Pause Table", self)
         self.btnPause.setCheckable(True)
         self.btnPause.clicked[bool].connect(self.onPauseClicked)
-        self.btnPause.setStyleSheet("background-color: rgba(2,128,192,255);")
+        # Label reflects state (no color cue); updates on any checked-state change.
+        self.btnPause.toggled.connect(lambda checked: self.btnPause.setText("Resume Table" if checked else "Pause Table"))
+        sparrowtheme.themed_button(self.btnPause)
         
         self.btnStream = QPushButton("Streaming Save", self)
         self.btnStream.setCheckable(True)
         self.btnStream.clicked[bool].connect(self.onStreamClicked)
-        self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
-        
+        # Label reflects state (no color cue); updates on any checked-state change.
+        self.btnStream.toggled.connect(lambda checked: self.btnStream.setText("Stop Streaming" if checked else "Streaming Save"))
+        sparrowtheme.themed_button(self.btnStream)
+
+        # Uniform button width sized to the widest possible label across all
+        # states (labels change with state) so nothing clips regardless of font.
+        # Height is font-driven but bounded (the button band sits in a fixed gap
+        # above the table, so the style's full sizeHint height can be too tall).
+        self.btnRowHeight = self.btnPause.fontMetrics().height() + 10
+        self.btnRowWidth = 0
+        for btn, labels in [(self.btnPause, ["Pause Table", "Resume Table"]),
+                            (self.btnExport, ["Export Table"]),
+                            (self.btnStream, ["Streaming Save", "Stop Streaming"])]:
+            keep = btn.text()
+            for label in labels:
+                btn.setText(label)
+                self.btnRowWidth = max(self.btnRowWidth, btn.sizeHint().width())
+            btn.setText(keep)
+
         self.createChart()
         
         self.setBlackoutColors()
@@ -231,10 +250,17 @@ class TelemetryDialog(QDialog):
         # chart
         self.timePlot.setGeometry(10, 10, int(self.geometry().width() - smallerDim - 30), smallerDim)
 
-        # Buttons
-        self.btnPause.setGeometry(10, int(self.geometry().height()/2+18), 110, 25)
-        self.btnExport.setGeometry(150, int(self.geometry().height()/2+18), 110, 25)
-        self.btnStream.setGeometry(290, int(self.geometry().height()/2+18), 110, 25)
+        # Buttons: uniform width sized to the widest label, laid out left-to-right.
+        halfH = int(self.geometry().height()/2)
+        btnY = halfH + 18
+        btnW = self.btnRowWidth
+        # Keep the row within the gap above the table (which starts at halfH+50).
+        btnH = min(self.btnRowHeight, (halfH + 50) - btnY - 4)
+        gap = 10
+        bx = 10
+        self.btnPause.setGeometry(bx, btnY, btnW, btnH); bx += btnW + gap
+        self.btnExport.setGeometry(bx, btnY, btnW, btnH); bx += btnW + gap
+        self.btnStream.setGeometry(bx, btnY, btnW, btnH)
         
         # Table
         self.locationTable.setGeometry(10, int(self.geometry().height()/2 + 50), int(self.geometry().width()-20), int(self.geometry().height()/2-60))
@@ -278,10 +304,10 @@ class TelemetryDialog(QDialog):
     def onVisibilityChanged(self, visible):
         if not visible:
             self.paused = True
-            self.btnPause.setStyleSheet("background-color: rgba(255,0,0,255);")
+            sparrowtheme.themed_button(self.btnPause)
             # We're coming out of streaming
             self.streamingSave = False
-            self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnStream)
             self.btnStream.setChecked(False)
             if (self.streamingFile):
                 self.streamingFile.close()
@@ -289,7 +315,7 @@ class TelemetryDialog(QDialog):
             return
         else:
             self.paused = False
-            self.btnPause.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnPause)
             if self.locationTable.rowCount() > 1:
                 self.locationTable.scrollToItem(self.locationTable.item(0, 0))
         
@@ -302,28 +328,28 @@ class TelemetryDialog(QDialog):
     def onPauseClicked(self, pressed):
         if self.btnPause.isChecked():
             self.paused = True
-            self.btnPause.setStyleSheet("background-color: rgba(255,0,0,255);")
+            sparrowtheme.themed_button(self.btnPause)
         else:
             self.paused = False
-            self.btnPause.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnPause)
         
     def onStreamClicked(self, pressed):
         if not self.btnStream.isChecked():
             # We're coming out of streaming
             self.streamingSave = False
-            self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnStream)
             if (self.streamingFile):
                 self.streamingFile.close()
                 self.streamingFile = None
             return
             
-        self.btnStream.setStyleSheet("background-color: rgba(255,0,0,255);")
+        sparrowtheme.themed_button(self.btnStream)
         self.streamingSave = True
         
         fileName = self.saveFileDialog()
 
         if not fileName:
-            self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnStream)
             self.btnStream.setChecked(False)
             return
             
@@ -333,7 +359,7 @@ class TelemetryDialog(QDialog):
             QMessageBox.question(self, 'Error',"Unable to write to " + fileName, QMessageBox.Ok)
             self.streamingFile = None
             self.streamingSave = False
-            self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnStream)
             self.btnStream.setChecked(False)
             return
             
@@ -600,19 +626,19 @@ class BluetoothTelemetry(TelemetryDialog):
         if not self.btnStream.isChecked():
             # We're coming out of streaming
             self.streamingSave = False
-            self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnStream)
             if (self.streamingFile):
                 self.streamingFile.close()
                 self.streamingFile = None
             return
             
-        self.btnStream.setStyleSheet("background-color: rgba(255,0,0,255);")
+        sparrowtheme.themed_button(self.btnStream)
         self.streamingSave = True
         
         fileName = self.saveFileDialog()
 
         if not fileName:
-            self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnStream)
             self.btnStream.setChecked(False)
             return
             
@@ -622,7 +648,7 @@ class BluetoothTelemetry(TelemetryDialog):
             QMessageBox.question(self, 'Error',"Unable to write to " + fileName, QMessageBox.Ok)
             self.streamingFile = None
             self.streamingSave = False
-            self.btnStream.setStyleSheet("background-color: rgba(2,128,192,255);")
+            sparrowtheme.themed_button(self.btnStream)
             self.btnStream.setChecked(False)
             return
             

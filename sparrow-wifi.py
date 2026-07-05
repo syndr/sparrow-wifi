@@ -934,31 +934,46 @@ class mainWindow(QMainWindow):
         self.btnScan = QPushButton("&Scan", self)
         self.btnScan.setCheckable(True)
         self.btnScan.setShortcut('Ctrl+S')
-        self.btnScan.setStyleSheet("background-color: rgba(0,128,192,255); border: none;")
+        sparrowtheme.themed_button(self.btnScan)
+        # Fix the width to the longest label ("Stop scanning") so it never clips;
+        # size from the label's own hint so it tracks the theme font.
+        self.btnScan.setText("&Stop scanning")
+        self.btnScan.setFixedWidth(self.btnScan.sizeHint().width())
+        self.btnScan.setText("&Scan")
         self.btnScan.move(260, 30)
         self.btnScan.clicked[bool].connect(self.onScanClicked)
+        # Scan-mode controls flow left-to-right from the scan button's right edge,
+        # each sized to its hint, so nothing overlaps when the font (and thus the
+        # button width) changes.
+        gap = 15
+        xpos = self.btnScan.geometry().right() + gap
         
         # Scan Mode
         self.lblScanMode = QLabel("Scan Mode:", self)
-        self.lblScanMode.setGeometry(380, 30, 80, 30)
+        lblModeW = self.lblScanMode.sizeHint().width()
+        self.lblScanMode.setGeometry(xpos, 30, lblModeW, 30)
+        xpos += lblModeW + 5
 
         self.scanModeCombo = QComboBox(self)
         self.scanModeCombo.setStatusTip('All-channel normal scans can take 5-10 seconds per sweep.  Use Hunt mode for faster response time on a selected channel.')
-        self.scanModeCombo.move(465, 30)
         self.scanModeCombo.addItem("Normal")
         self.scanModeCombo.addItem("Hunt")
+        self.scanModeCombo.move(xpos, 30)
         self.scanModeCombo.currentIndexChanged.connect(self.onScanModeChanged)
+        xpos += self.scanModeCombo.sizeHint().width() + gap
         
-        self.lblScanMode = QLabel("Hunt Channel or Frequencies(s):", self)
-        self.lblScanMode.setGeometry(565, 30, 200, 30)
+        self.lblHuntChannel = QLabel("Hunt Channel or Frequencies(s):", self)
+        lblHuntW = self.lblHuntChannel.sizeHint().width()
+        self.lblHuntChannel.setGeometry(xpos, 30, lblHuntW, 30)
+        xpos += lblHuntW + 5
         self.huntChannels = QLineEdit(self)
         self.huntChannels.setStatusTip('Channels or center frequencies can be specified.  List should be comma-separated.')
-        self.huntChannels.setGeometry(763, 30, 100, 30)
+        self.huntChannels.setGeometry(xpos, 30, 100, 30)
         self.huntChannels.setText('1')
 
         # Hide them to start
         self.huntChannels.setVisible(False)
-        self.lblScanMode.setVisible(False)
+        self.lblHuntChannel.setVisible(False)
         
         # Age out checkbox
         self.cbAgeOut = QCheckBox(self)
@@ -1904,10 +1919,10 @@ class mainWindow(QMainWindow):
         
         if self.scanMode == "Normal":
             self.huntChannels.setVisible(False)
-            self.lblScanMode.setVisible(False)
+            self.lblHuntChannel.setVisible(False)
         else:
             self.huntChannels.setVisible(True)
-            self.lblScanMode.setVisible(True)
+            self.lblHuntChannel.setVisible(True)
             
         self.getHuntChannels()
         
@@ -2475,7 +2490,7 @@ class mainWindow(QMainWindow):
         self.huntChannels.setEnabled(True)
         
         self.btnScan.setEnabled(True)
-        self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+        sparrowtheme.themed_button(self.btnScan)
         self.btnScan.setText('&Scan')
         
         # Display the data or any errors if they occurred
@@ -2508,7 +2523,7 @@ class mainWindow(QMainWindow):
         self.huntChannels.setEnabled(False)
         
         self.btnScan.setEnabled(False)
-        self.btnScan.setStyleSheet("background-color: rgba(224,224,224,255); border: none;")
+        sparrowtheme.themed_button(self.btnScan)
         self.btnScan.setText('&Scanning')
         self.btnScan.repaint()
         
@@ -2592,11 +2607,11 @@ class mainWindow(QMainWindow):
                 
         if self.btnScan.isChecked():
             # Scanning is on.  Turn red to indicate click would stop
-            self.btnScan.setStyleSheet("background-color: rgba(255,0,0,255); border: none;")
+            sparrowtheme.themed_button(self.btnScan)
             self.btnScan.setText('&Stop scanning')
             self.menuRemoteAgent.setEnabled(False)
         else:
-            self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+            sparrowtheme.themed_button(self.btnScan)
             self.btnScan.setText('&Scan')
             self.menuRemoteAgent.setEnabled(True)
 
@@ -2801,14 +2816,14 @@ class mainWindow(QMainWindow):
                 
         if self.btnScan.isChecked():
             # Scanning is on.  Turn red to indicate click would stop
-            self.btnScan.setStyleSheet("background-color: rgba(255,0,0,255); border: none;")
+            sparrowtheme.themed_button(self.btnScan)
             self.btnScan.setText('&Stop scanning')
             self.menuRemoteAgent.setEnabled(False)
             self.scanModeCombo.setEnabled(False)
             self.huntChannels.setEnabled(False)
             self.combo.setEnabled(False)
         else:
-            self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+            sparrowtheme.themed_button(self.btnScan)
             self.btnScan.setText('&Scan')
             self.menuRemoteAgent.setEnabled(True)
             self.scanModeCombo.setEnabled(True)
@@ -2853,7 +2868,7 @@ class mainWindow(QMainWindow):
                 self.btnScan.setChecked(False)
                 
                 # Undo button
-                self.btnScan.setStyleSheet("background-color: rgba(2,128,192,255); border: none;")
+                sparrowtheme.themed_button(self.btnScan)
                 self.btnScan.setText('&Scan')
                 self.menuRemoteAgent.setEnabled(True)
                 self.scanModeCombo.setEnabled(True)
