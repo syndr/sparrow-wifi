@@ -24,16 +24,18 @@ jobs:
           sudo apt-get install -y ruby ruby-dev binutils   # binutils -> `ar`, needed by fpm's deb output
           sudo gem install --no-document fpm
 
-      - name: Determine version
+      - name: Read version from source
         id: ver
         run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            V="${GITHUB_REF_NAME#v}"
-          else
-            V="0.0.0"
-          fi
+          V=$(awk -F'"' '/^__version__/{print $2}' sparrowversion.py)
+          if [ -z "$V" ]; then echo "::error::could not read __version__ from sparrowversion.py"; exit 1; fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Building version $V"
+          echo "App __version__ = $V"
+          # On a release tag, fail loudly if it doesn't match the source version.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$V" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match __version__ ($V); expected v$V"
+            exit 1
+          fi
 
       - name: Build package
         run: make deb VERSION=${{ steps.ver.outputs.version }}

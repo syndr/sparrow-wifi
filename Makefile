@@ -17,7 +17,9 @@
 # Fedora rpm needs a source build of the binding. Tracked as a follow-up.
 
 PKG         := sparrow-wifi
-VERSION     ?= 1.0.0
+# Version is read from the app's single source of truth (sparrowversion.py).
+# Override on the command line if needed: `make deb VERSION=x.y.z`.
+VERSION     ?= $(shell awk -F'"' '/^__version__/{print $$2}' sparrowversion.py)
 ITERATION   ?= 1
 MAINTAINER  := UltronCORE <syndr@ultroncore.net>
 URL         := https://github.com/syndr/sparrow-wifi
@@ -34,7 +36,7 @@ APP_PY := \
 	sparrow-wifi.py sparrowwifiagent.py sparrowbluetooth.py sparrowcommon.py \
 	sparrowdialogs.py sparrowdrone.py sparrowgps.py sparrowhackrf.py \
 	sparrowmap.py sparrowrpi.py sparrowtablewidgets.py sparrowtheme.py \
-	wirelessengine.py telemetry.py __init__.py
+	sparrowversion.py wirelessengine.py telemetry.py __init__.py
 APP_DATA := wifi_icon.png LICENSE
 APP_DIRS := images plugins
 

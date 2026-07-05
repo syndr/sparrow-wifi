@@ -38,10 +38,14 @@ resolved by the package manager on the target host.
 Requires `fpm` (`gem install fpm`, needs Ruby).
 
 ```sh
-make deb                 # -> dist/sparrow-wifi_1.0.0-1_all.deb
-make VERSION=1.2.0 deb   # override the version
+make deb                 # version read from sparrowversion.py -> dist/sparrow-wifi_2.1.0-1_all.deb
+make VERSION=9.9.9 deb   # override the version if you must
 make clean
 ```
+
+The package version comes from **`sparrowversion.py`** (`__version__`) — the same
+value the app shows in its window title and About dialog. Bump that one line to
+change the version everywhere.
 
 Inspect the result:
 
@@ -59,8 +63,12 @@ sudo apt-get purge   -y sparrow-wifi     # also wipes /var/lib/sparrow-wifi
 
 ## Releasing
 
-Push a `v*` tag (e.g. `v1.2.0`). CI derives the version from the tag, builds the
-`.deb`, runs the dual-arch install tests, and attaches it to a GitHub Release.
+1. Bump `__version__` in `sparrowversion.py`.
+2. Push a matching tag: `v<version>` (e.g. `v2.1.0`).
+
+CI reads the version from `sparrowversion.py`, **fails if the tag doesn't match**
+(`vX.Y.Z` must equal `v$__version__`), builds the `.deb`, runs the dual-arch
+install tests, and attaches it to a GitHub Release.
 
 ## RPM (deferred)
 
