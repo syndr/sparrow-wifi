@@ -1,0 +1,101 @@
+name: package
+
+# Build the .deb with fpm, install-test it on amd64 + arm64, and publish it
+# to a GitHub Release on version tags.
+# (.rpm support is deferred — see packaging/README.md for the Fedora blocker.)
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install fpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev binutils   # binutils -> `ar`, needed by fpm's deb output
+          sudo gem install --no-document fpm
+
+      - name: Read version from source
+        id: ver
+        run: |
+          V=$(awk -F'"' '/^__version__/{print $2}' sparrowversion.py)
+          if [ -z "$V" ]; then echo "::error::could not read __version__ from sparrowversion.py"; exit 1; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "App __version__ = $V"
+          # On a release tag, fail loudly if it doesn't match the source version.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$V" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match __version__ ($V); expected v$V"
+            exit 1
+          fi
+
+      - name: Build package
+        run: make deb VERSION=${{ steps.ver.outputs.version }}
+
+      - name: List artifacts
+        run: ls -l dist/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: dist/*
+          if-no-files-found: error
+
+  test-deb:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: dist
+
+      - name: Install the .deb (apt resolves dependencies)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ./dist/*.deb
+
+      - name: Verify the venv + Qt stack import
+        run: |
+          QT_QPA_PLATFORM=offscreen /var/lib/sparrow-wifi/venv/bin/python3 - <<'PY'
+          import PyQt5.QtWidgets, PyQt5.QtChart, PyQt5.Qsci, manuf, gps3
+          print("import check OK on", __import__("platform").machine())
+          PY
+
+      - name: Purge and confirm state is removed
+        run: |
+          sudo apt-get purge -y sparrow-wifi
+          test ! -e /var/lib/sparrow-wifi && echo "state dir removed OK"
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [test-deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

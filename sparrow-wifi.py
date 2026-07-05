@@ -54,6 +54,7 @@ from sparrowwifiagent import AgentConfigSettings
 from sparrowbluetooth import SparrowBluetooth
 from sparrowhackrf import SparrowHackrf
 import sparrowtheme
+from sparrowversion import __version__
 
 # There are some "plugins" that are available for addons.  Let's see if they're present
 hasFalcon = False
@@ -830,8 +831,8 @@ class mainWindow(QMainWindow):
         # self.setGeometry(10, 10, 800, 600)
         self.resize(self.mainWidth, self.mainHeight)
         self.center()
-        self.setWindowTitle('Sparrow-WiFi Analyzer')
-        self.setWindowIcon(QIcon('wifi_icon.png'))        
+        self.setWindowTitle('Sparrow-WiFi Analyzer v' + __version__)
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'wifi_icon.png')))
 
         self.createMenu()
         
@@ -3950,6 +3951,7 @@ class mainWindow(QMainWindow):
 
     def onAbout(self):
         aboutMsg = "Sparrow-wifi 802.11 WiFi Graphic Analyzer\n"
+        aboutMsg += "Version " + __version__ + "\n"
         aboutMsg += "Written by ghostop14\n"
         aboutMsg += "https://github.com/ghostop14\n\n"
         aboutMsg += "This application is open source and licensed\n"
