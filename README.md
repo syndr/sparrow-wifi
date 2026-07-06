@@ -13,6 +13,57 @@ The project includes four components that work standalone or together:
 
 The Sparrow Agent and Sparrow DroneID expose JSON REST APIs that allow other applications to query scan results, trigger scans, retrieve drone detections, and integrate wireless/drone awareness into their own workflows. The Elastic Bridge consumes the agent's REST API and ships ECS 8.17 documents with bundled Kibana dashboards.
 
+> **About this fork:** this is a downstream fork that adds features and fixes on top of upstream &mdash; including scan reliability improvements, installable `.deb` packaging with CI, a venv installer, and a substantially upgraded desktop GUI (system-following theming, signal-strength coloring, and scan-table UX). See [What's New in This Fork](#whats-new-in-this-fork-july-2026) for the full list.
+
+---
+
+## What's New in This Fork (July 2026)
+
+This fork focuses on the desktop GUI experience, packaging, and install ergonomics on top of upstream. Highlights (v2.1.1):
+
+- **System-following theming** &mdash; a new theme engine (`sparrowtheme.py`) with **System / Light / Dark** modes (Settings → Theme, persisted; also a `--theme` CLI flag). In System mode the app applies your desktop's **qt5ct** style, palette, and fonts; when qt5ct is unavailable it falls back to detecting light/dark and applying a Fusion palette. Chrome, data tables, headers, and the 2.4/5 GHz + telemetry charts are all themed cohesively, and the detected scheme survives `pkexec` root elevation (the launcher forwards it plus `XDG_CONFIG_HOME`).
+- **Signal-strength coloring** &mdash; WiFi and Bluetooth signal is colorized by recommended strength bands (green / orange / red) across the scan tables and telemetry trackers. Bands are configurable per radio in Settings → Signal Strength Colors, since BLE RSSI reads weaker than WiFi (defaults: WiFi green ≥ −60 / orange ≥ −75 dBm; Bluetooth −70 / −85).
+- **Scan reliability + scan-table UX** &mdash; the `iw scan` subprocess now has a 15s timeout so a wedged driver no longer freezes results or hangs the Stop button, and the inter-scan delay is configurable (`--scan-delay`, Settings → Scan Interval). The network table gains a live filter box (MAC / vendor / SSID), per-column visibility toggles, a Channel Graphs toggle to reclaim the window, deterministic font-sized columns (no more dragging on every launch), and Reset Column Widths. The filter also spotlights matching lines in the channel graphs by dimming the rest.
+- **Themed buttons with state in the label** &mdash; buttons follow the active theme instead of hardcoded blue/red, and convey state via their text (e.g. "Pause Table"/"Resume Table", "Streaming Save"/"Stop Streaming"). Button rows are sized to the font so labels no longer clip under the larger qt5ct font.
+- **Chart & table polish** &mdash; telemetry and Bluetooth tables are sized from font metrics against representative values; chart axis titles ("dBm", "Channel", "Sample") no longer elide to "…"; and grid lines are dimmed so they don't overpower the data.
+- **Persisted UI settings** &mdash; scan interval, spectrum-analyzer gain, channel-graph visibility, per-column visibility, theme, and signal thresholds all survive restarts via QSettings.
+- **`.deb` packaging, CI, and versioning** &mdash; Sparrow-WiFi builds as an installable `.deb` via `fpm` (Makefile + `packaging/`), installing a `pkexec` launcher, `.desktop` entry, and icon; the post-install builds a `--system-site-packages` venv under `/var/lib/sparrow-wifi`. A GitHub Actions pipeline builds, install-tests (amd64 + arm64), and publishes to a Release on `v*` tags. `scripts/build-deb-podman.sh` reproduces the build locally in a cached container with no fpm toolchain on the host. `sparrowversion.py` is the single source of truth for the version (shown in the window title and About dialog).
+- **Venv installer** &mdash; `scripts/install.sh` sets up a dedicated venv (reusing distro-provided Qt bindings), installs apt + pip deps, and registers a menu launcher that elevates via `pkexec` at click time; `--update` git-pulls and refreshes deps.
+
+### Screenshots
+
+> **Note on the look:** the polished appearance in these screenshots comes from the [**Hackerer**](https://github.com/syndr/hackerer-theme) **Kvantum** desktop theme applied through `qt5ct` &mdash; it is **not bundled with the package**. Sparrow-WiFi follows whatever qt5ct theme you have configured; in System mode with no qt5ct theme present it falls back to a built-in Fusion light/dark palette.
+
+<details>
+<summary><b>WiFi scan table &mdash; themed, with per-radio signal-strength coloring</b></summary>
+
+<p align="center">
+  <img src="./images/wifi_table_themed.png" width="800"/>
+</p>
+
+Signal is colorized by strength band, and the Settings menu exposes Signal Strength Colors, Scan Interval, Reset Column Widths, and Theme.
+</details>
+
+<details>
+<summary><b>Live filter + channel-graph spotlight</b></summary>
+
+<p align="center">
+  <img src="./images/main_filtered_themed.png" width="800"/>
+</p>
+
+Typing in the Filter box (here <code>Ult</code>) hides non-matching rows and spotlights the matching lines in the 2.4/5 GHz channel graphs, dimming the rest.
+</details>
+
+<details>
+<summary><b>Bluetooth (BLE) scan table &mdash; themed</b></summary>
+
+<p align="center">
+  <img src="./images/ble_table_themed.png" width="800"/>
+</p>
+
+Font-sized columns and per-radio RSSI coloring (BLE thresholds default weaker than WiFi).
+</details>
+
 ---
 
 ## What's New (April 2026)
@@ -43,11 +94,11 @@ The original Sparrow application provides a comprehensive GUI-based replacement 
 ### Screenshots
 
 <p align="center">
-  <img src="./sparrow-screenshot.png" width="800"/>
+  <img src="./images/main_dark.png" width="800"/>
 </p>
 
 <p align="center">
-  <img src="./telemetry-screenshot.png" width="600"/>
+  <img src="./images/telemetry_dark.png" width="800"/>
 </p>
 
 ---
